@@ -1,18 +1,30 @@
 import { AxiosRequestHeaders, RawAxiosRequestHeaders } from "axios";
 export interface UploadRequestOptions {
-    action: string;
-    method: string;
+    /**
+     * 请求地址，不设置默认使用配置的bigUploadApi
+    */
+    action?: string;
+    /**
+     * 请求方法，不设置默认POST
+    */
+    method?: string;
     data: Record<string, string | Blob | [Blob, string]>;
     filename: string;
-    file: UploadRawFile;
-    headers: RawAxiosRequestHeaders | AxiosRequestHeaders;
+    file: File & {
+        uid?: number | string;
+    };
+    /**
+     * 不需要配置，使用配置的钩子函数即可
+    */
+    headers?: RawAxiosRequestHeaders | AxiosRequestHeaders;
     onError: (evt: UploadAjaxError) => void;
     onProgress: (evt: UploadProgressEvent) => void;
     onSuccess: (response: any) => void;
     withCredentials: boolean;
+    MD5Method: 'file' | 'fileInfo' | 'uuidv4';
 }
 export interface UploadRawFile extends File {
-    uid: number;
+    uid: number | string;
 }
 export interface UploadAjaxError extends Error {
     name: string;

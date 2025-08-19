@@ -53,14 +53,15 @@ import { AjaxResultCode } from "../enums/system";
 import RequestFactory from "./RequestFactory";
 import { getFileMd5 } from "../utils/index";
 import kconfig from '../kconfig';
-var KongError = /** @class */ (function (_super) {
-    __extends(KongError, _super);
-    function KongError(m) {
+import { v4 as uuidv4 } from 'uuid';
+var HibackError = /** @class */ (function (_super) {
+    __extends(HibackError, _super);
+    function HibackError(m) {
         var _this = _super.call(this, m) || this;
-        _this.name = "KongError";
+        _this.name = "HibackError";
         return _this;
     }
-    return KongError;
+    return HibackError;
 }(Error));
 var UploadRequestFactory = /** @class */ (function () {
     function UploadRequestFactory(config) {
@@ -250,26 +251,29 @@ var UploadRequestFactory = /** @class */ (function () {
      * */
     UploadRequestFactory.prototype.httpRequest = function (option) {
         return __awaiter(this, void 0, void 0, function () {
-            var md5;
+            var md5, _a;
             var _this = this;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
+            return __generator(this, function (_b) {
+                switch (_b.label) {
                     case 0:
                         if (typeof XMLHttpRequest === 'undefined') {
-                            throw new KongError("[XMLHttpRequest is undefined");
+                            throw new HibackError("[XMLHttpRequest is undefined");
                         }
+                        option.action = option.action || this.request.bigUploadApi;
+                        option.method = option.method || 'POST';
+                        option.file.uid = option.file.uid || option.file.name;
                         this.uploadNotify({ uid: option.file.uid, message: '正在计算中...' });
-                        return [4 /*yield*/, getFileMd5(option.file, function (percent) {
-                                _this.uploadNotify({ uid: option.file.uid, message: "\u6B63\u5728\u8BA1\u7B97\u4E2D...".concat(percent.toFixed(0), "%") });
-                            })
-                            /***
-                             * 当为Promise时elupload内部将根据resolve调用一次onSucces，
-                             * 当前封装的上传逻辑不需要本次默认的调用而是需要根据其内部异步处理逻辑更具处理进度情况调用
-                             * by kongj 2024.0913
-                             **/
-                        ];
-                    case 1:
-                        md5 = _a.sent();
+                        if (!(option.MD5Method === 'uuidv4')) return [3 /*break*/, 1];
+                        _a = uuidv4();
+                        return [3 /*break*/, 3];
+                    case 1: return [4 /*yield*/, getFileMd5(option.file, function (percent) {
+                            _this.uploadNotify({ uid: option.file.uid, message: "\u6B63\u5728\u8BA1\u7B97\u4E2D...".concat(percent.toFixed(0), "%") });
+                        }, option.MD5Method == 'fileInfo')];
+                    case 2:
+                        _a = (_b.sent());
+                        _b.label = 3;
+                    case 3:
+                        md5 = _a;
                         /***
                          * 当为Promise时elupload内部将根据resolve调用一次onSucces，
                          * 当前封装的上传逻辑不需要本次默认的调用而是需要根据其内部异步处理逻辑更具处理进度情况调用

@@ -2,7 +2,7 @@
  * 获取文件的MD5
  *
 */
-export declare const getFileMd5: (file: File, callabck: (percent: number) => void) => Promise<string>;
+export declare const getFileMd5: (file: File, callback: (percent: number) => void, useFileInfo?: boolean) => Promise<string>;
 /**
 * @description 精度控制
 */

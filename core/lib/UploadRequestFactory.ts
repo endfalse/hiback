@@ -5,10 +5,11 @@ import { getFileMd5 } from "../utils/index"
 import { RequestOptionType, UploadAjaxError, UploadProgressEvent, UploadRequestHandler, UploadRequestOptions } from "../types/upload"
 import kconfig from '../kconfig'
 import { AxiosRequestHeaders, RawAxiosRequestHeaders } from "axios"
-class KongError extends Error {
+import { v4 as uuidv4 } from 'uuid';
+class HibackError extends Error {
   constructor(m: string) {
     super(m)
-    this.name = "KongError"
+    this.name = "HibackError"
   }
 }
 
@@ -129,7 +130,7 @@ class UploadRequestFactory{
                 sendAjax()
             })
             xhr.addEventListener('error', () => 
-                this.getError(option.action, option as UploadRequestOptions, xhr)
+                this.getError(option.action!, option as UploadRequestOptions, xhr)
             )
             if (option.withCredentials && 'withCredentials' in xhr) {
                 xhr.withCredentials = true
@@ -157,8 +158,8 @@ class UploadRequestFactory{
                         else data.append(key, value)
                         }
                     }
-                    xhr.open(option.method,option.action, true)
-                    this.setHeaders(xhr,option.headers,option.withCredentials && 'withCredentials' in xhr)
+                    xhr.open(option.method!,option.action!, true)
+                    this.setHeaders(xhr,option.headers!,option.withCredentials && 'withCredentials' in xhr)
                     xhr.send(data)
                 }
                 option.loaded=(option.loaded||0) + blob.size
@@ -184,12 +185,20 @@ class UploadRequestFactory{
      * */ 
     private async httpRequest(option:RequestOptionType) : Promise<UploadRequestHandler> {
         if (typeof XMLHttpRequest === 'undefined'){
-            throw new KongError(`[XMLHttpRequest is undefined`)
+            throw new HibackError(`[XMLHttpRequest is undefined`)
         }
+        option.action = option.action || this.request.bigUploadApi
+        option.method = option.method||'POST'
+
+        option.file.uid = option.file.uid||option.file.name
+
+
         this.uploadNotify({uid:option.file.uid,message:'正在计算中...'})
-        const md5 =  await getFileMd5(option.file,(percent)=>{
-            this.uploadNotify({uid:option.file.uid,message:`正在计算中...${percent.toFixed(0)}%`})
-        })
+
+        const md5 = option.MD5Method==='uuidv4'? uuidv4():  (await getFileMd5(option.file,(percent)=>{
+            this.uploadNotify({uid:option.file.uid!,message:`正在计算中...${percent.toFixed(0)}%`})
+        },option.MD5Method=='fileInfo'))
+
         /***
          * 当为Promise时elupload内部将根据resolve调用一次onSucces，
          * 当前封装的上传逻辑不需要本次默认的调用而是需要根据其内部异步处理逻辑更具处理进度情况调用
@@ -206,23 +215,23 @@ class UploadRequestFactory{
                     else urlParams.append(key, value as string)
                 }
             }
-            this.uploadNotify({uid:option.file.uid,message:'稍等，正在上传中...'})
+            this.uploadNotify({uid:option.file.uid!,message:'稍等，正在上传中...'})
             xhr.addEventListener('load',async ()=>{
                 const result = await  this.nextProcess(xhr,option,async (uploadedMap)=>{
                     option.loaded=0
                     //非秒传文件时进行分片上传-如果文件较小同样适用分片逻辑
                     const complete =await  this.uploadCore(md5,option,uploadedMap)
-                    complete&&this.uploadNotify({uid:option.file.uid,message:''})
+                    complete&&this.uploadNotify({uid:option.file.uid!,message:''})
                 })
                 if(result&&result.code==AjaxResultCode.uploadInstant){
-                    this.uploadNotify({uid:option.file.uid,message:''})
+                    this.uploadNotify({uid:option.file.uid!,message:''})
                 }
             })
             xhr.addEventListener('error', () => {
-                option.onError( this.getError(option.action, option, xhr))
+                option.onError( this.getError(option.action!, option, xhr))
             }) 
             xhr.open('get',`${option.action}/preCheck?${urlParams.toString()}`,true)
-            this.setHeaders(xhr,option.headers,true)
+            this.setHeaders(xhr,option.headers!,true)
             xhr.send(urlParams)
         })
     }

@@ -4,11 +4,25 @@ import SparkMD5 from "spark-md5";
  * 获取文件的MD5
  *
 */
-export var getFileMd5 = function (file, callabck) {
+export var getFileMd5 = function (file, callback, useFileInfo // 新增参数，默认不使用文件信息生成
+) {
+    if (useFileInfo === void 0) { useFileInfo = false; }
     return new Promise(function (resolve, reject) {
+        // 如果指定使用文件信息生成MD5
+        if (useFileInfo) {
+            var spark_1 = new SparkMD5();
+            // 使用文件的基本信息生成MD5：名称、大小、最后修改时间
+            spark_1.append(file.name);
+            spark_1.append(String(file.size));
+            spark_1.append(String(file.lastModified));
+            callback(100); // 立即完成
+            resolve(spark_1.end());
+            return;
+        }
+        // 否则按原逻辑读取文件内容生成MD5
         var spark = new SparkMD5.ArrayBuffer();
         var fileReader = new FileReader();
-        var chunkSize = 1 * 1024 * 1024; // 2MB的块大小，可以根据实际情况调整
+        var chunkSize = 1 * 1024 * 1024; // 1MB的块大小
         var chunksRead = 0;
         var totalChunks = Math.ceil(file.size / chunkSize);
         var readNextChunk = function () {
@@ -21,12 +35,12 @@ export var getFileMd5 = function (file, callabck) {
             if (event.target && event.target.result instanceof ArrayBuffer) {
                 spark.append(event.target.result);
                 chunksRead++;
+                // 调用回调更新进度
+                callback(Math.floor((chunksRead / totalChunks) * 100));
                 if (chunksRead < totalChunks) {
                     readNextChunk();
-                    callabck(chunksRead * 100 / totalChunks);
                 }
                 else {
-                    callabck(100);
                     resolve(spark.end());
                 }
             }

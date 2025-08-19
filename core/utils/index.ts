@@ -4,41 +4,64 @@ import SparkMD5 from "spark-md5";
  * 获取文件的MD5
  * 
 */
-export const getFileMd5 = (file: File,callabck:(percent:number)=>void) => {
+export const getFileMd5 = (
+  file: File, 
+  callback: (percent: number) => void, 
+  useFileInfo: boolean = false  // 新增参数，默认不使用文件信息生成
+) => {
     return new Promise<string>((resolve, reject) => {
+        // 如果指定使用文件信息生成MD5
+        if (useFileInfo) {
+            const spark = new SparkMD5();
+            // 使用文件的基本信息生成MD5：名称、大小、最后修改时间
+            spark.append(file.name);
+            spark.append(String(file.size));
+            spark.append(String(file.lastModified));
+            callback(100); // 立即完成
+            resolve(spark.end());
+            return;
+        }
+
+        // 否则按原逻辑读取文件内容生成MD5
         const spark = new SparkMD5.ArrayBuffer();
         const fileReader = new FileReader();
-        const chunkSize = 1*1024*1024; // 2MB的块大小，可以根据实际情况调整
+        const chunkSize = 1 * 1024 * 1024; // 1MB的块大小
         let chunksRead = 0;
-        let totalChunks = Math.ceil(file.size / chunkSize);
+        const totalChunks = Math.ceil(file.size / chunkSize);
+        
         const readNextChunk = () => {
             const start = chunksRead * chunkSize;
             const end = Math.min(start + chunkSize, file.size);
             const blob = file.slice(start, end);
             fileReader.readAsArrayBuffer(blob);
-        }
+        };
+        
         fileReader.onload = function (event) {
             if (event.target && event.target.result instanceof ArrayBuffer) {
                 spark.append(event.target.result);
                 chunksRead++;
+                
+                // 调用回调更新进度
+                callback(Math.floor((chunksRead / totalChunks) * 100));
+                
                 if (chunksRead < totalChunks) {
                     readNextChunk();
-                    callabck(chunksRead*100/totalChunks)
                 } else {
-                  callabck(100)
                     resolve(spark.end());
                 }
             } else {
                 resolve('');
             }
-        }
+        };
+        
         fileReader.onerror = function (error) {
             reject(error);
-        }
+        };
+        
         readNextChunk();
     });
-}
-
+};
+    
 /**
 * @description 精度控制
 */
