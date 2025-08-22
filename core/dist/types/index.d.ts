@@ -24,6 +24,17 @@ export interface AxiosConfig {
     [key: string]: any;
 }
 /**
+ * Content-Type常量定义
+ */
+export declare const ContentTypes: {
+    readonly FORM_URLENCODED: "application/x-www-form-urlencoded";
+    readonly MULTIPART_FORM_DATA: "multipart/form-data";
+    readonly JSON: "application/json";
+    readonly TEXT_PLAIN: "text/plain";
+    readonly XML: "application/xml";
+};
+export type ContentType = typeof ContentTypes[keyof typeof ContentTypes];
+/**
  * 登录响应
  */
 export interface LoginResponse {
