@@ -47,10 +47,12 @@ var RequestFactory = /** @class */ (function () {
             return _this.request({
                 url: _this.config.refreshTokenApi,
                 method: 'post',
-                data: { refreshToken: _this.config.refreshToken() }
+                data: { refreshToken: _this.config.refreshToken() },
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             });
         };
-        this.tryPopMessage = function (ajaxResult) {
+        //处理UI级消息相应
+        this.messagePop = function (ajaxResult) {
             if (typeof (ajaxResult.code) === 'number' && ajaxResult.message) {
                 var code = ajaxResult.code, message = ajaxResult.message;
                 switch (code) {
@@ -77,8 +79,8 @@ var RequestFactory = /** @class */ (function () {
         this.showError = function (error) {
             var _a;
             if (error instanceof AxiosError) {
-                if (_this.isAjaxResult((_a = error.response) === null || _a === void 0 ? void 0 : _a.data)) {
-                    _this.tryPopMessage(error.response.data);
+                if (_this.isBizJsonResult((_a = error.response) === null || _a === void 0 ? void 0 : _a.data)) {
+                    _this.messagePop(error.response.data);
                 }
                 else {
                     var badMessage = error.message || error;
@@ -88,11 +90,11 @@ var RequestFactory = /** @class */ (function () {
                 if (error.status === 403 || error.status === 401) {
                     setTimeout(function () {
                         _this.config.signOut();
-                    }, 3000);
+                    }, _this.config.signOutWhen401And403Time || 500);
                 }
             }
             else {
-                _this.tryPopMessage(error.data);
+                _this.messagePop(error.data);
             }
         };
         //获取响应体数据
@@ -108,7 +110,8 @@ var RequestFactory = /** @class */ (function () {
                 return text;
             }
         };
-        this.unWrapResponse = function (nativeResponse) {
+        //从Http响应中获取业务级响应
+        this.pickBizResponse = function (nativeResponse) {
             if (nativeResponse.data.feedback) {
                 return nativeResponse.data;
             }
@@ -116,80 +119,77 @@ var RequestFactory = /** @class */ (function () {
                 nativeResponse.data = {};
             }
             var response;
-            var data = nativeResponse.data;
-            if (data && typeof (data.code) !== 'undefined') {
-                response = data.code === AjaxResultCode.Success
-                    ? (data.data !== undefined ? data.data : true)
-                    : (data.data !== undefined ? data.data : false);
+            var retResult = nativeResponse.data;
+            if (retResult && typeof (retResult.code) !== 'undefined') {
+                response = retResult.code === AjaxResultCode.Success
+                    ? (retResult.data !== undefined ? retResult.data : true)
+                    : (retResult.data !== undefined ? retResult.data : false);
             }
             else {
-                response = data;
+                response = retResult;
             }
             return response;
         };
-        this.responseProcess = function (response, unWrapResponseFn) {
-            if (unWrapResponseFn === void 0) { unWrapResponseFn = undefined; }
-            if (response.status === 200) {
-                var code = response.data.code;
-                var resolveFn_1 = function (resolve, response) {
-                    if (unWrapResponseFn) {
-                        resolve(unWrapResponseFn(response.data));
-                    }
-                    else {
-                        resolve(_this.unWrapResponse(response));
-                    }
-                };
-                if (code === AjaxResultCode.InvalidToken) {
-                    if (!_this.requests.isRefreshing) {
-                        _this.requests.isRefreshing = true;
-                        return new Promise(function (resolve) {
-                            _this.refreshToken().then(function (token) { return __awaiter(_this, void 0, void 0, function () {
-                                var newret;
-                                return __generator(this, function (_a) {
-                                    switch (_a.label) {
-                                        case 0:
-                                            if (!token) return [3 /*break*/, 2];
-                                            this.config.saveToken(token);
-                                            this.config.headerHook(response.headers);
-                                            return [4 /*yield*/, this.service(response.config)];
-                                        case 1:
-                                            newret = _a.sent();
-                                            this.requests.listing.forEach(function (cb) { return cb(token); });
-                                            this.requests.clear();
-                                            resolve(newret);
-                                            return [3 /*break*/, 3];
-                                        case 2: throw new Error('refresh token is invalid');
-                                        case 3: return [2 /*return*/];
-                                    }
-                                });
-                            }); }).catch(function (reason) {
-                                _this.requests.clear(true, reason);
-                            });
+        //处理令牌过期问题
+        this.processInvalidToken = function (response) {
+            if (!_this.requests.isRefreshing) {
+                _this.requests.isRefreshing = true;
+                return new Promise(function (resolve) {
+                    _this.refreshToken().then(function (token) { return __awaiter(_this, void 0, void 0, function () {
+                        var newret;
+                        return __generator(this, function (_a) {
+                            switch (_a.label) {
+                                case 0:
+                                    if (!token) return [3 /*break*/, 2];
+                                    //保存新的令牌
+                                    this.config.saveToken(token);
+                                    return [4 /*yield*/, this.request(response.config)
+                                        //处理token过期时请求需要的响应
+                                    ];
+                                case 1:
+                                    newret = _a.sent();
+                                    //处理token过期时请求需要的响应
+                                    resolve(newret);
+                                    //检查过期后同时发送的其他请求，并根据新的token重新发送请求
+                                    this.requests.listing.forEach(function (cb) { return cb(token); });
+                                    //清除请求队列
+                                    this.requests.clear();
+                                    return [3 /*break*/, 3];
+                                case 2: throw new Error('refresh token is invalid');
+                                case 3: return [2 /*return*/];
+                            }
                         });
-                    }
-                    // else if(this.requests.isRefreshing)
-                    // {
-                    //   return Promise.reject("刷新令牌已失效")
-                    // }
-                    return new Promise(function (resolve) {
-                        _this.requests.listing.push(function (_) {
-                            //response.headers['Authorization'] = `Bearer ${token}`
-                            _this.config.headerHook(response.headers);
-                            _this.service(response.config).then(function (real) {
-                                resolveFn_1(resolve, real);
-                            });
-                        });
+                    }); }).catch(function (reason) {
+                        _this.requests.clear(true, reason);
                     });
-                }
-                _this.tryPopMessage(response.data);
-                return new Promise(function (resolve) { return resolveFn_1(resolve, response); });
+                });
             }
-            else {
-                _this.showError(response);
-                return Promise.reject(response);
-            }
+            // else if(this.requests.isRefreshing)
+            // {
+            //   return Promise.reject("刷新令牌已失效")
+            // }
+            return new Promise(function (_) {
+                _this.requests.listing.push(function (_) {
+                    //response.headers['Authorization'] = `Bearer ${token}`
+                    //this.config.headerHook(response.headers) //设置请求头 统一设置此处不要
+                    _this.request(response.config);
+                    // .then(real=>{
+                    //   this.resolveResponse(real,resolve)
+                    // })
+                });
+            });
         };
-        //获取包装好的响应内容
+        //处理响应入口 
+        this.responseProcess = function (response) {
+            var bizCode = response.data.code;
+            //兼容旧版本无权限情况
+            if (bizCode === AjaxResultCode.InvalidToken) {
+                return _this.processInvalidToken(response);
+            }
+            _this.messagePop(response.data);
+            return new Promise(function (resolve) { return _this.resolveResponse(response, resolve); });
+        };
+        //从Http相应获取重新包装的响应内容
         this.getAxiosResponse = function (xhr, config) {
             return {
                 data: _this.getBody(xhr),
@@ -212,10 +212,17 @@ var RequestFactory = /** @class */ (function () {
         for (var key in config) {
             config[key] && (this.config[key] = config[key]);
         }
+        this.config.unPackResponse = this.config.unPackResponse || this.pickBizResponse;
         this.service = axios.create({ baseURL: this.config.baseUrl, timeout: this.config.timeout });
-        // 请求前的统一处理
+        // 请求拦截器
         this.service.interceptors.request.use(this.defaultInterceptor, function (error) { return Promise.reject(error); });
+        // 响应拦截器
         this.service.interceptors.response.use(this.responseProcess, function (error) {
+            var _a, _b;
+            if (((_a = error.response) === null || _a === void 0 ? void 0 : _a.status) === 401 && ((_b = error.response.data) === null || _b === void 0 ? void 0 : _b.code) === AjaxResultCode.InvalidToken) {
+                //无权限情况
+                return _this.processInvalidToken(error.response);
+            }
             _this.showError(error);
             return Promise.reject(error);
         });
@@ -233,6 +240,7 @@ var RequestFactory = /** @class */ (function () {
                     config.params = config.data;
                     delete config.data;
                 }
+                _this.config.headerHook(config.headers);
                 return config;
             };
         },
@@ -271,8 +279,12 @@ var RequestFactory = /** @class */ (function () {
         enumerable: false,
         configurable: true
     });
-    RequestFactory.prototype.isAjaxResult = function (ajaxResult) {
+    RequestFactory.prototype.isBizJsonResult = function (ajaxResult) {
         return ajaxResult && typeof ajaxResult === 'object' && 'code' in ajaxResult;
+    };
+    //处理业务级响应AxiosResponse<TRetData, TRequestData> | PromiseLike<AxiosResponse<TRetData, TRequestData>>
+    RequestFactory.prototype.resolveResponse = function (response, resolve) {
+        resolve(this.config.unPackResponse(response));
     };
     Object.defineProperty(RequestFactory.prototype, "bigUploadApi", {
         get: function () {

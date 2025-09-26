@@ -4,6 +4,7 @@ var config = {
     bigUploadApi: 'https://j.jq123.net/file/uploadBig',
     normalUploadApi: 'https://j.jq123.net/file',
     refreshTokenApi: 'system/user/refreshToken',
+    signOutWhen401And403Time: 500,
     headerHook: function () {
         console.debug("尚未实现kconfig.api.headerHook");
     },

@@ -4,7 +4,7 @@ import RequestFactory from "./RequestFactory"
 import { getFileMd5 } from "../utils/index"
 import { RequestOptionType, UploadAjaxError, UploadProgressEvent, UploadRequestHandler, UploadRequestOptions } from "../types/upload"
 import kconfig from '../kconfig'
-import { AxiosRequestHeaders, RawAxiosRequestHeaders } from "axios"
+import { AxiosRequestHeaders, AxiosResponse, RawAxiosRequestHeaders } from "axios"
 import { v4 as uuidv4 } from 'uuid';
 class HibackError extends Error {
   constructor(m: string) {
@@ -19,7 +19,6 @@ class UploadRequestFactory{
     private uploadNotify:(e:{uid:string|number,message:string})=>void
     private request;
     constructor(config: Optional<AxiosConfig>){
-
         for(const key in kconfig){
             if(config[key]===undefined){
                 config[key] = kconfig[key]
@@ -67,8 +66,9 @@ class UploadRequestFactory{
     //下一步响应处理兼容本框架异步axos封装逻辑
     private async nextProcess (xhr:XMLHttpRequest,option:RequestOptionType,uploadIfNot:((uploadedMap:string[])=>void)|undefined =undefined):Promise<AjaxResult|undefined>
     {
-        const response =  this.request.getAxiosResponse(xhr,option as any)
-        const unwapperFun=(ajaxResult: AjaxResult):any=>{
+        const response =  this.request.getAxiosResponse(xhr,option)
+        const unwapperFun=(nativeResponse: AxiosResponse<AjaxResult,any>):any=>{
+            const ajaxResult =nativeResponse.data
             if(typeof(ajaxResult.code)==='undefined'){
                 throw new Error('返回的数据格式错误')
             }
@@ -96,7 +96,8 @@ class UploadRequestFactory{
                 throw new Error('返回的数据格式错误')
             }
         }
-        return await this.request.responseProcess(response,unwapperFun)
+        this.request.axiosConfig.unPackResponse!=this.request.axiosConfig.unPackResponse||unwapperFun
+        return await this.request.responseProcess(response)
     }
 
     private setHeaders(xhr:XMLHttpRequest,headers:RawAxiosRequestHeaders | AxiosRequestHeaders,withCredentials:boolean){

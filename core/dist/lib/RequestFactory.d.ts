@@ -1,5 +1,5 @@
 import { AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
-import { AjaxResult, AxiosConfig, Optional } from '../types';
+import { AjaxResult, AxiosConfig, Optional, RequestOptionType } from '../types';
 declare class RequestFactory {
     private service;
     private get defaultInterceptor();
@@ -8,13 +8,15 @@ declare class RequestFactory {
     get axiosConfig(): AxiosConfig;
     private get requests();
     private refreshToken;
-    private tryPopMessage;
-    isAjaxResult(ajaxResult: any): ajaxResult is AjaxResult;
+    private messagePop;
+    private isBizJsonResult;
     private showError;
     private getBody;
-    unWrapResponse: (nativeResponse: AxiosResponse) => any;
-    responseProcess: (response: AxiosResponse<AjaxResult>, unWrapResponseFn?: ((ajaxResult: AjaxResult) => any) | undefined) => Promise<any>;
-    getAxiosResponse: (xhr: XMLHttpRequest, config: InternalAxiosRequestConfig) => AxiosResponse<AjaxResult, InternalAxiosRequestConfig>;
+    private pickBizResponse;
+    private resolveResponse;
+    private processInvalidToken;
+    responseProcess: (response: AxiosResponse) => Promise<any>;
+    getAxiosResponse: (xhr: XMLHttpRequest, config: InternalAxiosRequestConfig | RequestOptionType) => AxiosResponse<AjaxResult, InternalAxiosRequestConfig>;
     get bigUploadApi(): string;
     get normalUploadApi(): string;
     /**

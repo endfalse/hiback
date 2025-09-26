@@ -1,4 +1,4 @@
-import { AxiosRequestHeaders, AxiosResponseHeaders, RawAxiosRequestHeaders, RawAxiosResponseHeaders } from "axios";
+import { AxiosRequestHeaders, AxiosResponse, AxiosResponseHeaders, RawAxiosRequestHeaders, RawAxiosResponseHeaders } from "axios";
 import { FeedbackEnum, AjaxResultCode } from "../enums/system";
 export * from './contants'
 export * from './upload'
@@ -18,6 +18,8 @@ export interface AxiosConfig{
     messageBox:(type:'error'|'success'|'warning'|'info',message:string)=>void;
     chunkSize:number;
     uploadNotify:(e:{uid:string|number,message:string})=>void;
+    signOutWhen401And403Time?:number;
+    unPackResponse?:<TRetData=any,TRequestData=any>(nativeResponse: AxiosResponse<TRetData,TRequestData>)=>TRetData;
     [key:string]:any
 }
 

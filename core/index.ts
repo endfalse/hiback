@@ -9,7 +9,7 @@ export {kConfig,UploadRequestFactory,RequestFactory,utils,ProgressComputing}
 export default (axiosConfig:Optional<AxiosConfig>)=>{
     const facory = new RequestFactory(axiosConfig)
     const getAxiosResponse= (xhr: XMLHttpRequest, config: InternalAxiosRequestConfig)=>{return facory.getAxiosResponse(xhr,config)}
-    const responseProcess= (response: AxiosResponse<AjaxResult>, unWrapResponseFn?: ((ajaxResult: AjaxResult) => any) | undefined)=>{ return facory.responseProcess(response,unWrapResponseFn)}
+    const responseProcess= (response: AxiosResponse<AjaxResult>)=>{ return facory.responseProcess(response)}
     const request=<T=any,D=any>(config: AxiosRequestConfig<D>,contentType:ContentType='application/json')=>{
         if(contentType)
         {

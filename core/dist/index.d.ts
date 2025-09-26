@@ -6,7 +6,7 @@ import * as utils from './utils';
 export { kConfig, UploadRequestFactory, RequestFactory, utils, ProgressComputing };
 declare const _default: (axiosConfig: Optional<AxiosConfig>) => {
     getAxiosResponse: (xhr: XMLHttpRequest, config: InternalAxiosRequestConfig) => AxiosResponse<AjaxResult<any>, InternalAxiosRequestConfig<any>>;
-    responseProcess: (response: AxiosResponse<AjaxResult>, unWrapResponseFn?: ((ajaxResult: AjaxResult) => any) | undefined) => Promise<any>;
+    responseProcess: (response: AxiosResponse<AjaxResult>) => Promise<any>;
     request: <T = any, D = any>(config: AxiosRequestConfig<D>, contentType?: ContentType) => Promise<T>;
 };
 export default _default;

@@ -5,7 +5,7 @@ export { kConfig, UploadRequestFactory, RequestFactory, utils, ProgressComputing
 export default (function (axiosConfig) {
     var facory = new RequestFactory(axiosConfig);
     var getAxiosResponse = function (xhr, config) { return facory.getAxiosResponse(xhr, config); };
-    var responseProcess = function (response, unWrapResponseFn) { return facory.responseProcess(response, unWrapResponseFn); };
+    var responseProcess = function (response) { return facory.responseProcess(response); };
     var request = function (config, contentType) {
         if (contentType === void 0) { contentType = 'application/json'; }
         if (contentType) {

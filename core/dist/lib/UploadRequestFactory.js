@@ -118,7 +118,8 @@ var UploadRequestFactory = /** @class */ (function () {
                 switch (_a.label) {
                     case 0:
                         response = this.request.getAxiosResponse(xhr, option);
-                        unwapperFun = function (ajaxResult) {
+                        unwapperFun = function (nativeResponse) {
+                            var ajaxResult = nativeResponse.data;
                             if (typeof (ajaxResult.code) === 'undefined') {
                                 throw new Error('返回的数据格式错误');
                             }
@@ -145,7 +146,8 @@ var UploadRequestFactory = /** @class */ (function () {
                                 throw new Error('返回的数据格式错误');
                             }
                         };
-                        return [4 /*yield*/, this.request.responseProcess(response, unwapperFun)];
+                        this.request.axiosConfig.unPackResponse != this.request.axiosConfig.unPackResponse || unwapperFun;
+                        return [4 /*yield*/, this.request.responseProcess(response)];
                     case 1: return [2 /*return*/, _a.sent()];
                 }
             });
