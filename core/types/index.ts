@@ -12,9 +12,9 @@ export interface AxiosConfig{
     refreshTokenApi:string;
     headerHook:(header: RawAxiosRequestHeaders | AxiosRequestHeaders | RawAxiosResponseHeaders | AxiosResponseHeaders)=>void;
     signOut:()=>void,
-    saveToken:(token:string)=>void;
+    saveToken:(token:string,refreshToken:string|undefined)=>void;
     token:()=>string;
-    refreshToken:()=>string;
+    refreshToken:()=>string|boolean;
     messageBox:(type:'error'|'success'|'warning'|'info',message:string)=>void;
     chunkSize:number;
     uploadNotify:(e:{uid:string|number,message:string})=>void;

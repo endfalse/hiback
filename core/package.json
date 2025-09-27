@@ -1,7 +1,7 @@
 {
   "name": "hiback",
-  "version": "2.1.6",
-  "description": "",
+  "version": "2.1.10",
+  "description": "优化令牌刷新",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {

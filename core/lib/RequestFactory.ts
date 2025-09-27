@@ -4,18 +4,37 @@ import { AjaxResult, AxiosConfig, Optional, RequestOptionType } from '../types'
 import kconfig from '../kconfig'
 class RequestFactory{
     private service: AxiosInstance
+    private requests= {
+      isRefreshing:false,
+      listing:[] as ((token:string)=>void)[],
+      retry:0,
+      newToken:''
+    }
     private get defaultInterceptor() {
         return (config: InternalAxiosRequestConfig<any>)=>{
-            const token = this.config.token()
-            // JWT鉴权处理
-            if (token&&config.headers) {
-                config.headers.Authorization = `Bearer ${token}`;
-            }
-            if (config!=null&&config.data&&(config.method||'get').toLowerCase() === "get") {
-                config.params = config.data
-                delete config.data
-            } 
             this.config.headerHook(config.headers)
+            config.headers = config.headers||{}
+
+            // JWT鉴权处理
+            if(this.requests.isRefreshing){
+              if(this.requests.newToken){
+                config.headers.Authorization=`Bearer ${this.requests.newToken}`
+              }
+              else
+              {
+                //如果在刷新令牌时不需要设置jwt头
+                delete config.headers.Authorization
+              }
+            }
+            else{
+              const token = this.config.token()
+              config.headers.Authorization = `Bearer ${token}`;
+            }
+            
+            if (config!=null&&config.data&&(config.method||'get').toLowerCase() === "get") {
+              config.params = config.data
+              delete config.data
+            } 
             return config
         }
     }
@@ -31,6 +50,7 @@ class RequestFactory{
 
         this.service = axios.create({baseURL: this.config.baseUrl,timeout:this.config.timeout})
 
+        const useTokenRefresh=typeof(this.config.refreshToken())==='string'&&this.config.refreshToken()!==''
         // 请求拦截器
         this.service.interceptors.request.use(
             this.defaultInterceptor,
@@ -40,7 +60,8 @@ class RequestFactory{
         this.service.interceptors.response.use(
             this.responseProcess,
             (error: AxiosError<AjaxResult>)=> {
-              if(error.response?.status === 401&&(error.response.data?.code as AjaxResultCode)===AjaxResultCode.InvalidToken){
+              this.requests.isRefreshing=false
+              if(useTokenRefresh&&error.response?.status === 401&&(error.response.data?.code as AjaxResultCode)===AjaxResultCode.InvalidToken){
                 //无权限情况
                 return this.processInvalidToken(error.response)
               }
@@ -53,34 +74,27 @@ class RequestFactory{
     public get axiosConfig() {
         return this.config
     }
+    
 
-    private get requests(){
-        const that =this
-        return {
-            isRefreshing:false,
-            listing:[] as ((token:string)=>void)[],
-            retry:0,
-            clear(loginOut:boolean=false,reason:any|undefined=undefined){
-                this.listing=[],
-                this.isRefreshing =false,
-                this.retry=0
-                if(loginOut)
-                {
-                    that.config.signOut()
-                }
-                if(reason)
-                {
-                    Promise.reject(reason)
-                }
-            }
-        }
+    private resetRequests(loginOut:boolean=false,reason:any|undefined=undefined){
+          this.requests.listing=[],
+          this.requests.isRefreshing =false,
+          this.requests.retry=0
+          this.requests.newToken=''
+          if(loginOut)
+          {
+              this.config.signOut()
+          }
+          if(reason)
+          {
+              Promise.reject(reason)
+          }
     }
-
     private refreshToken = ()=>{
         if(this.requests.retry>0){
             throw new Error('refresh token is invalid')
         }
-        return this.request<string>({
+        return this.request<{token:string,refreshToken:string}>({
           url: this.config.refreshTokenApi,
           method: 'post',
           data:{refreshToken:this.config.refreshToken()},
@@ -186,47 +200,40 @@ class RequestFactory{
 
     //处理令牌过期问题
     private processInvalidToken=(response: AxiosResponse)=>{
-            if(!this.requests.isRefreshing)
-            {
-              this.requests.isRefreshing=true
-              return new Promise(resolve=>{
-                this.refreshToken().then(async token=>{
-                    if (token) {
-                      //保存新的令牌
-                      this.config.saveToken(token)
-                      //设置请求头 统一设置此处不要
-                      //this.config.headerHook(response.headers)
-                      //获取上次的请求重新发送并获取结果
-                      const newret =  await this.request(response.config)
-                      //处理token过期时请求需要的响应
-                      resolve(newret)
-                      //检查过期后同时发送的其他请求，并根据新的token重新发送请求
-                      this.requests.listing.forEach((cb) => cb(token))
-                      //清除请求队列
-                      this.requests.clear()
-                    }
-                    else {
-                      throw new Error('refresh token is invalid')
-                    }
-                }).catch(reason=>{
-                    this.requests.clear(true,reason)
-                })
-              }) 
-            }
-            // else if(this.requests.isRefreshing)
-            // {
-            //   return Promise.reject("刷新令牌已失效")
-            // }
-            return new Promise<any>(_=>{
-                this.requests.listing.push(_=>{
-                  //response.headers['Authorization'] = `Bearer ${token}`
-                  //this.config.headerHook(response.headers) //设置请求头 统一设置此处不要
-                  this.request(response.config)
-                  // .then(real=>{
-                  //   this.resolveResponse(real,resolve)
-                  // })
-              })
-            })
+      if(!this.requests.isRefreshing)
+      {
+        this.requests.isRefreshing=true
+        return new Promise(resolve=>{
+          this.refreshToken().then(async tokens=>{
+            const {token,refreshToken} = tokens
+              if (token&&refreshToken) {
+                //保存新的令牌
+                this.config.saveToken(token,refreshToken)
+                this.requests.newToken = token
+                //获取上次的请求重新发送并获取结果
+                const newret =  await this.request(response.config)
+                //处理token过期时请求需要的响应
+                resolve(newret)
+                //检查过期后同时发送的其他请求，并根据新的token重新发送请求
+                this.requests.listing.forEach((cb) => cb(token))
+                //清除请求队列
+                this.resetRequests()
+              }
+              else {
+                throw new Error('refresh token is invalid')
+              }
+          }).catch(reason=>{
+            this.resetRequests(true,reason)
+          })
+        }).finally(()=>{
+          this.requests.isRefreshing=false
+        }) 
+      }
+      return new Promise<any>(_=>{
+        this.requests.listing.push(_=>{
+          this.request(response.config)
+        })
+      })
     } 
 
     //处理响应入口 

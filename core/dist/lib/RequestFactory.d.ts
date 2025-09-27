@@ -2,11 +2,12 @@ import { AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'a
 import { AjaxResult, AxiosConfig, Optional, RequestOptionType } from '../types';
 declare class RequestFactory {
     private service;
+    private requests;
     private get defaultInterceptor();
     private config;
     constructor(config: Optional<AxiosConfig>);
     get axiosConfig(): AxiosConfig;
-    private get requests();
+    private resetRequests;
     private refreshToken;
     private messagePop;
     private isBizJsonResult;

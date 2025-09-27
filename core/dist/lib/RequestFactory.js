@@ -40,6 +40,12 @@ import kconfig from '../kconfig';
 var RequestFactory = /** @class */ (function () {
     function RequestFactory(config) {
         var _this = this;
+        this.requests = {
+            isRefreshing: false,
+            listing: [],
+            retry: 0,
+            newToken: ''
+        };
         this.refreshToken = function () {
             if (_this.requests.retry > 0) {
                 throw new Error('refresh token is invalid');
@@ -135,14 +141,16 @@ var RequestFactory = /** @class */ (function () {
             if (!_this.requests.isRefreshing) {
                 _this.requests.isRefreshing = true;
                 return new Promise(function (resolve) {
-                    _this.refreshToken().then(function (token) { return __awaiter(_this, void 0, void 0, function () {
-                        var newret;
+                    _this.refreshToken().then(function (tokens) { return __awaiter(_this, void 0, void 0, function () {
+                        var token, refreshToken, newret;
                         return __generator(this, function (_a) {
                             switch (_a.label) {
                                 case 0:
-                                    if (!token) return [3 /*break*/, 2];
+                                    token = tokens.token, refreshToken = tokens.refreshToken;
+                                    if (!(token && refreshToken)) return [3 /*break*/, 2];
                                     //保存新的令牌
-                                    this.config.saveToken(token);
+                                    this.config.saveToken(token, refreshToken);
+                                    this.requests.newToken = token;
                                     return [4 /*yield*/, this.request(response.config)
                                         //处理token过期时请求需要的响应
                                     ];
@@ -153,29 +161,22 @@ var RequestFactory = /** @class */ (function () {
                                     //检查过期后同时发送的其他请求，并根据新的token重新发送请求
                                     this.requests.listing.forEach(function (cb) { return cb(token); });
                                     //清除请求队列
-                                    this.requests.clear();
+                                    this.resetRequests();
                                     return [3 /*break*/, 3];
                                 case 2: throw new Error('refresh token is invalid');
                                 case 3: return [2 /*return*/];
                             }
                         });
                     }); }).catch(function (reason) {
-                        _this.requests.clear(true, reason);
+                        _this.resetRequests(true, reason);
                     });
+                }).finally(function () {
+                    _this.requests.isRefreshing = false;
                 });
             }
-            // else if(this.requests.isRefreshing)
-            // {
-            //   return Promise.reject("刷新令牌已失效")
-            // }
             return new Promise(function (_) {
                 _this.requests.listing.push(function (_) {
-                    //response.headers['Authorization'] = `Bearer ${token}`
-                    //this.config.headerHook(response.headers) //设置请求头 统一设置此处不要
                     _this.request(response.config);
-                    // .then(real=>{
-                    //   this.resolveResponse(real,resolve)
-                    // })
                 });
             });
         };
@@ -214,12 +215,16 @@ var RequestFactory = /** @class */ (function () {
         }
         this.config.unPackResponse = this.config.unPackResponse || this.pickBizResponse;
         this.service = axios.create({ baseURL: this.config.baseUrl, timeout: this.config.timeout });
+        var useTokenRefresh = typeof (this.config.refreshToken()) === 'string' && this.config.refreshToken() !== '';
         // 请求拦截器
         this.service.interceptors.request.use(this.defaultInterceptor, function (error) { return Promise.reject(error); });
         // 响应拦截器
         this.service.interceptors.response.use(this.responseProcess, function (error) {
             var _a, _b;
-            if (((_a = error.response) === null || _a === void 0 ? void 0 : _a.status) === 401 && ((_b = error.response.data) === null || _b === void 0 ? void 0 : _b.code) === AjaxResultCode.InvalidToken) {
+            _this.requests.isRefreshing = false;
+            if (useTokenRefresh
+                && ((_a = error.response) === null || _a === void 0 ? void 0 : _a.status) === 401
+                && ((_b = error.response.data) === null || _b === void 0 ? void 0 : _b.code) === AjaxResultCode.InvalidToken) {
                 //无权限情况
                 return _this.processInvalidToken(error.response);
             }
@@ -231,16 +236,26 @@ var RequestFactory = /** @class */ (function () {
         get: function () {
             var _this = this;
             return function (config) {
-                var token = _this.config.token();
+                _this.config.headerHook(config.headers);
+                config.headers = config.headers || {};
                 // JWT鉴权处理
-                if (token && config.headers) {
+                if (_this.requests.isRefreshing) {
+                    if (_this.requests.newToken) {
+                        config.headers.Authorization = "Bearer ".concat(_this.requests.newToken);
+                    }
+                    else {
+                        //如果在刷新令牌时不需要设置jwt头
+                        delete config.headers.Authorization;
+                    }
+                }
+                else {
+                    var token = _this.config.token();
                     config.headers.Authorization = "Bearer ".concat(token);
                 }
                 if (config != null && config.data && (config.method || 'get').toLowerCase() === "get") {
                     config.params = config.data;
                     delete config.data;
                 }
-                _this.config.headerHook(config.headers);
                 return config;
             };
         },
@@ -254,31 +269,20 @@ var RequestFactory = /** @class */ (function () {
         enumerable: false,
         configurable: true
     });
-    Object.defineProperty(RequestFactory.prototype, "requests", {
-        get: function () {
-            var that = this;
-            return {
-                isRefreshing: false,
-                listing: [],
-                retry: 0,
-                clear: function (loginOut, reason) {
-                    if (loginOut === void 0) { loginOut = false; }
-                    if (reason === void 0) { reason = undefined; }
-                    this.listing = [],
-                        this.isRefreshing = false,
-                        this.retry = 0;
-                    if (loginOut) {
-                        that.config.signOut();
-                    }
-                    if (reason) {
-                        Promise.reject(reason);
-                    }
-                }
-            };
-        },
-        enumerable: false,
-        configurable: true
-    });
+    RequestFactory.prototype.resetRequests = function (loginOut, reason) {
+        if (loginOut === void 0) { loginOut = false; }
+        if (reason === void 0) { reason = undefined; }
+        this.requests.listing = [],
+            this.requests.isRefreshing = false,
+            this.requests.retry = 0;
+        this.requests.newToken = '';
+        if (loginOut) {
+            this.config.signOut();
+        }
+        if (reason) {
+            Promise.reject(reason);
+        }
+    };
     RequestFactory.prototype.isBizJsonResult = function (ajaxResult) {
         return ajaxResult && typeof ajaxResult === 'object' && 'code' in ajaxResult;
     };
