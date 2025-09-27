@@ -7,6 +7,7 @@ const config:AxiosConfig={
     normalUploadApi:'https://j.jq123.net/file',
     refreshTokenApi:'system/user/refreshToken',
     signOutWhen401And403Time:500,
+    useRefreshToken:false,
     headerHook:()=>{
         console.debug("尚未实现kconfig.api.headerHook")
     },

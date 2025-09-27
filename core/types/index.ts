@@ -10,11 +10,12 @@ export interface AxiosConfig{
     bigUploadApi:string;
     normalUploadApi:string;
     refreshTokenApi:string;
+    useRefreshToken:boolean;
     headerHook:(header: RawAxiosRequestHeaders | AxiosRequestHeaders | RawAxiosResponseHeaders | AxiosResponseHeaders)=>void;
     signOut:()=>void,
     saveToken:(token:string,refreshToken:string|undefined)=>void;
     token:()=>string;
-    refreshToken:()=>string|boolean;
+    refreshToken:()=>string;
     messageBox:(type:'error'|'success'|'warning'|'info',message:string)=>void;
     chunkSize:number;
     uploadNotify:(e:{uid:string|number,message:string})=>void;

@@ -215,16 +215,13 @@ var RequestFactory = /** @class */ (function () {
         }
         this.config.unPackResponse = this.config.unPackResponse || this.pickBizResponse;
         this.service = axios.create({ baseURL: this.config.baseUrl, timeout: this.config.timeout });
-        var useTokenRefresh = typeof (this.config.refreshToken()) === 'string' && this.config.refreshToken() !== '';
         // 请求拦截器
         this.service.interceptors.request.use(this.defaultInterceptor, function (error) { return Promise.reject(error); });
         // 响应拦截器
         this.service.interceptors.response.use(this.responseProcess, function (error) {
             var _a, _b;
             _this.requests.isRefreshing = false;
-            if (useTokenRefresh
-                && ((_a = error.response) === null || _a === void 0 ? void 0 : _a.status) === 401
-                && ((_b = error.response.data) === null || _b === void 0 ? void 0 : _b.code) === AjaxResultCode.InvalidToken) {
+            if (_this.config.useRefreshToken && ((_a = error.response) === null || _a === void 0 ? void 0 : _a.status) === 401 && ((_b = error.response.data) === null || _b === void 0 ? void 0 : _b.code) === AjaxResultCode.InvalidToken) {
                 //无权限情况
                 return _this.processInvalidToken(error.response);
             }

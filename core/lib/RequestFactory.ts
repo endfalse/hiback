@@ -50,7 +50,6 @@ class RequestFactory{
 
         this.service = axios.create({baseURL: this.config.baseUrl,timeout:this.config.timeout})
 
-        const useTokenRefresh=typeof(this.config.refreshToken())==='string'&&this.config.refreshToken()!==''
         // 请求拦截器
         this.service.interceptors.request.use(
             this.defaultInterceptor,
@@ -61,7 +60,7 @@ class RequestFactory{
             this.responseProcess,
             (error: AxiosError<AjaxResult>)=> {
               this.requests.isRefreshing=false
-              if(useTokenRefresh&&error.response?.status === 401&&(error.response.data?.code as AjaxResultCode)===AjaxResultCode.InvalidToken){
+              if(this.config.useRefreshToken&&error.response?.status === 401&&(error.response.data?.code as AjaxResultCode)===AjaxResultCode.InvalidToken){
                 //无权限情况
                 return this.processInvalidToken(error.response)
               }
