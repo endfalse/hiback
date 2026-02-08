@@ -13,12 +13,12 @@ class HibackError extends Error {
   }
 }
 
-class UploadRequestFactory{
+class UploadRequestFactory<TResponseCode=number>{
     //默认文件分片上传大小
     private chunkSize:number = 1024 * 1024 * 1
     private uploadNotify:(e:{uid:string|number,message:string})=>void
     private request;
-    constructor(config: Optional<AxiosConfig>){
+    constructor(config: Optional<AxiosConfig<TResponseCode>>){
         for(const key in kconfig){
             if(config[key]===undefined){
                 config[key] = kconfig[key]
@@ -26,7 +26,7 @@ class UploadRequestFactory{
         }
         this.uploadNotify = kconfig.uploadNotify
         this.chunkSize = kconfig.chunkSize
-        this.request = new RequestFactory(config)
+        this.request = new RequestFactory<TResponseCode>(config)
     }
     public create=(option:RequestOptionType)=>{
         return this.httpRequest(option)
@@ -64,10 +64,10 @@ class UploadRequestFactory{
     }
 
     //下一步响应处理兼容本框架异步axos封装逻辑
-    private async nextProcess (xhr:XMLHttpRequest,option:RequestOptionType,uploadIfNot:((uploadedMap:string[])=>void)|undefined =undefined):Promise<AjaxResult|undefined>
+    private async nextProcess (xhr:XMLHttpRequest,option:RequestOptionType,uploadIfNot:((uploadedMap:string[])=>void)|undefined =undefined):Promise<AjaxResult<TResponseCode>|undefined>
     {
         const response =  this.request.getAxiosResponse(xhr,option)
-        const unwapperFun=(nativeResponse: AxiosResponse<AjaxResult,any>):any=>{
+        const unwapperFun=(nativeResponse: AxiosResponse<AjaxResult<TResponseCode>,any>):any=>{
             const ajaxResult =nativeResponse.data
             if(typeof(ajaxResult.code)==='undefined'){
                 throw new Error('返回的数据格式错误')

@@ -1,6 +1,6 @@
 {
   "name": "hiback",
-  "version": "2.1.11",
+  "version": "5.0.0",
   "description": "优化令牌刷新",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -11,7 +11,7 @@
   "author": "kongjing",
   "repository": {
     "type": "git",
-    "url": "https://github.com/endfalse/kong"
+    "url": "https://github.com/endfalse/hiback"
   },
   "license": "MIT",
   "dependencies": {

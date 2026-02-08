@@ -36,7 +36,6 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 import axios, { AxiosError } from 'axios';
 import { AjaxResultCode } from '../enums/system';
-import kconfig from '../kconfig';
 var RequestFactory = /** @class */ (function () {
     function RequestFactory(config) {
         var _this = this;
@@ -45,6 +44,45 @@ var RequestFactory = /** @class */ (function () {
             listing: [],
             retry: 0,
             newToken: ''
+        };
+        this.KCONFIG = {
+            baseUrl: 'https://j.jq123.net',
+            timeout: 3000,
+            bigUploadApi: 'https://j.jq123.net/file/uploadBig',
+            normalUploadApi: 'https://j.jq123.net/file',
+            refreshTokenApi: 'system/user/refreshToken',
+            signOutWhen401And403Time: 500,
+            useRefreshToken: false,
+            nextDo: function () {
+                return false;
+            },
+            headerHook: function () {
+                console.debug("尚未实现kconfig.api.headerHook");
+            },
+            signOut: function () {
+                throw new Error("请实现此Hook->sinOut");
+            },
+            token: function () {
+                return '---token---';
+            },
+            refreshToken: function () {
+                return '---refreshToken---';
+            },
+            saveToken: function () {
+                throw new Error("请实现此Hook->saveToken");
+            },
+            uploadNotify: function (e) {
+                console.info('kconfig.uploadHook.uploadNotify->e:%o', e);
+            },
+            messageBox: function () {
+                throw new Error("kconfig.ts尚未实现:messageBox(type:'error'|'success'|'warning'|'info',message:string)");
+            },
+            chunkSize: 1024 * 1024 * 1,
+            merge: function (options) {
+                for (var key in options) {
+                    this[key] = options[key];
+                }
+            }
         };
         this.refreshToken = function () {
             if (_this.requests.retry > 0) {
@@ -58,49 +96,39 @@ var RequestFactory = /** @class */ (function () {
             });
         };
         //处理UI级消息相应
-        this.messagePop = function (ajaxResult) {
-            if (typeof (ajaxResult.code) === 'number' && ajaxResult.message) {
-                var code = ajaxResult.code, message = ajaxResult.message;
-                switch (code) {
-                    case AjaxResultCode.Error:
-                        _this.config.messageBox('error', message || '服务异常');
-                        break;
-                    case AjaxResultCode.Fail:
-                    case AjaxResultCode.Warning:
-                        _this.config.messageBox('warning', message || '服务异常');
-                        break;
-                    case AjaxResultCode.None:
-                        message && _this.config.messageBox('info', message);
-                        break;
-                    case AjaxResultCode.Success:
-                        message && _this.config.messageBox('success', message);
-                        break;
-                    default:
-                        _this.config.messageBox('error', message || "\u672A\u80FD\u8BC6\u522Bcode:".concat(code, "\uFF0C\u8BF7\u68C0\u67E5\u63A5\u53E3"));
-                        break;
-                }
-            }
+        this.messagePop = function (response) {
+            // const message = response.data.message
+            // if(response.status===200){
+            //   message&&this.config.messageBox('success',message)
+            // }
+            // else{
+            //   this.config.messageBox('error',message || '服务异常')
+            // }
+            _this.config.messageBox({ status: response.status, code: response.data.code, message: response.data.message });
         };
         // 错误处理
         this.showError = function (error) {
             var _a;
             if (error instanceof AxiosError) {
                 if (_this.isBizJsonResult((_a = error.response) === null || _a === void 0 ? void 0 : _a.data)) {
-                    _this.messagePop(error.response.data);
+                    _this.messagePop(error.response);
                 }
                 else {
                     var badMessage = error.message || error;
-                    _this.config.messageBox('error', badMessage || '服务异常');
+                    _this.config.messageBox({
+                        status: error.status || 500,
+                        data: { code: 500, message: badMessage || '服务异常', data: undefined }
+                    });
                 }
                 // token过期，清除本地数据，并跳转至登录页面
                 if (error.status === 403 || error.status === 401) {
                     setTimeout(function () {
                         _this.config.signOut();
-                    }, _this.config.signOutWhen401And403Time || 500);
+                    }, _this.config.signOutWhen401And403Time || 300);
                 }
             }
             else {
-                _this.messagePop(error.data);
+                _this.messagePop(error);
             }
         };
         //获取响应体数据
@@ -118,12 +146,13 @@ var RequestFactory = /** @class */ (function () {
         };
         //从Http响应中获取业务级响应
         this.pickBizResponse = function (nativeResponse) {
-            if (nativeResponse.data.feedback) {
-                return nativeResponse.data;
-            }
-            if (typeof nativeResponse.data === "undefined") {
-                nativeResponse.data = {};
-            }
+            // ddd
+            // if(nativeResponse.data.feedback){
+            //   return nativeResponse.data
+            // }
+            // if (typeof nativeResponse.data === "undefined") {
+            //   nativeResponse.data = {};
+            // }
             var response;
             var retResult = nativeResponse.data;
             if (retResult && typeof (retResult.code) !== 'undefined') {
@@ -182,12 +211,12 @@ var RequestFactory = /** @class */ (function () {
         };
         //处理响应入口 
         this.responseProcess = function (response) {
-            var bizCode = response.data.code;
-            //兼容旧版本无权限情况
-            if (bizCode === AjaxResultCode.InvalidToken) {
-                return _this.processInvalidToken(response);
-            }
-            _this.messagePop(response.data);
+            //const {code:bizCode} = response.data
+            //兼容旧版本无权限情况//
+            // if(bizCode===AjaxResultCode.InvalidToken){
+            //   return this.processInvalidToken(response)
+            // }
+            _this.messagePop(response);
             return new Promise(function (resolve) { return _this.resolveResponse(response, resolve); });
         };
         //从Http相应获取重新包装的响应内容
@@ -209,7 +238,7 @@ var RequestFactory = /** @class */ (function () {
         this.request = function (config) {
             return _this.service(config);
         };
-        this.config = kconfig;
+        this.config = this.KCONFIG;
         for (var key in config) {
             config[key] && (this.config[key] = config[key]);
         }
@@ -221,10 +250,15 @@ var RequestFactory = /** @class */ (function () {
         this.service.interceptors.response.use(this.responseProcess, function (error) {
             var _a, _b;
             _this.requests.isRefreshing = false;
-            if (_this.config.useRefreshToken && ((_a = error.response) === null || _a === void 0 ? void 0 : _a.status) === 401 && ((_b = error.response.data) === null || _b === void 0 ? void 0 : _b.code) === AjaxResultCode.InvalidToken) {
+            if (_this.config.useRefreshToken && _this.config.nextDo((_b = (_a = error.response) === null || _a === void 0 ? void 0 : _a.data) === null || _b === void 0 ? void 0 : _b.code)) {
                 //无权限情况
                 return _this.processInvalidToken(error.response);
             }
+            // if(this.config.useRefreshToken&&error.response?.status === 401
+            //   &&(error.response.data?.code as AjaxResultCode)===AjaxResultCode.InvalidToken){
+            //   //无权限情况
+            //   return this.processInvalidToken(error.response)
+            // }
             _this.showError(error);
             return Promise.reject(error);
         });

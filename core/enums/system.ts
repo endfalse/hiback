@@ -1,7 +1,7 @@
 /**
  * @description ajax 请求响应码
  */
- export enum AjaxResultCode {
+export enum AjaxResultCode {
     /***
      * 默认
     */

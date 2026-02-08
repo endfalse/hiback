@@ -1,29 +1,34 @@
 import { AxiosRequestHeaders, AxiosResponse, AxiosResponseHeaders, RawAxiosRequestHeaders, RawAxiosResponseHeaders } from "axios";
-import { FeedbackEnum, AjaxResultCode } from "../enums/system";
+import { FeedbackEnum } from "../enums/system";
 export * from './contants';
 export * from './upload';
 export * from '../enums/account';
 export * from '../enums/system';
-export interface AxiosConfig {
+export interface AxiosConfig<TResponseCode = number> {
     baseUrl: string;
     timeout: number;
     bigUploadApi: string;
     normalUploadApi: string;
     refreshTokenApi: string;
     useRefreshToken: boolean;
+    nextDo: (type?: TResponseCode) => boolean;
     headerHook: (header: RawAxiosRequestHeaders | AxiosRequestHeaders | RawAxiosResponseHeaders | AxiosResponseHeaders) => void;
     signOut: () => void;
     saveToken: (token: string, refreshToken: string | undefined) => void;
     token: () => string;
     refreshToken: () => string;
-    messageBox: (type: 'error' | 'success' | 'warning' | 'info', message: string) => void;
+    messageBox: (response: {
+        status: number;
+        code: TResponseCode;
+        message: string;
+    }) => void;
     chunkSize: number;
     uploadNotify: (e: {
         uid: string | number;
         message: string;
     }) => void;
     signOutWhen401And403Time?: number;
-    unPackResponse?: <TRetData = any, TRequestData = any>(nativeResponse: AxiosResponse<TRetData, TRequestData>) => TRetData;
+    unPackResponse?: <TRetData = any, TRequestData = any>(nativeResponse: AxiosResponse<AjaxResult<TResponseCode, TRetData>, TRequestData>) => TRetData;
     [key: string]: any;
 }
 /**
@@ -70,8 +75,8 @@ export type Optional<T> = {
 /**
  * @description axios 默认响应
 */
-export interface AjaxResult<T = any> {
-    code: AjaxResultCode;
+export interface AjaxResult<TResponseCode = number, T = any> {
+    code: TResponseCode;
     message: string;
     data: T;
 }

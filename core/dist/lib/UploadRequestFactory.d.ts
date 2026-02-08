@@ -1,10 +1,10 @@
 import { AxiosConfig, Optional } from "../types/index";
 import { RequestOptionType, UploadRequestHandler } from "../types/upload";
-declare class UploadRequestFactory {
+declare class UploadRequestFactory<TResponseCode = number> {
     private chunkSize;
     private uploadNotify;
     private request;
-    constructor(config: Optional<AxiosConfig>);
+    constructor(config: Optional<AxiosConfig<TResponseCode>>);
     create: (option: RequestOptionType) => Promise<UploadRequestHandler>;
     private getError;
     private isNil;

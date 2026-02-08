@@ -1,8 +1,9 @@
 import axios , { AxiosError, AxiosRequestConfig, AxiosResponse, AxiosInstance, InternalAxiosRequestConfig } from 'axios'
 import { AjaxResultCode } from '../enums/system'
 import { AjaxResult, AxiosConfig, Optional, RequestOptionType } from '../types'
-import kconfig from '../kconfig'
-class RequestFactory{
+
+
+class RequestFactory<TResponseCode=number>{
     private service: AxiosInstance
     private requests= {
       isRefreshing:false,
@@ -10,6 +11,7 @@ class RequestFactory{
       retry:0,
       newToken:''
     }
+
     private get defaultInterceptor() {
         return (config: InternalAxiosRequestConfig<any>)=>{
             this.config.headerHook(config.headers)
@@ -38,10 +40,51 @@ class RequestFactory{
             return config
         }
     }
-    private config:AxiosConfig
 
-    constructor(config:Optional<AxiosConfig>){
-        this.config = kconfig
+    private config:AxiosConfig<TResponseCode>
+
+    private KCONFIG:AxiosConfig<TResponseCode>={
+          baseUrl:'https://j.jq123.net',
+          timeout:3000,
+          bigUploadApi:'https://j.jq123.net/file/uploadBig',
+          normalUploadApi:'https://j.jq123.net/file',
+          refreshTokenApi:'system/user/refreshToken',
+          signOutWhen401And403Time:500,
+          useRefreshToken:false,
+          nextDo:()=>{
+              return false
+          },
+          headerHook:()=>{
+              console.debug("尚未实现kconfig.api.headerHook")
+          },
+          signOut:()=>{
+              throw new Error("请实现此Hook->sinOut")
+          },
+          token:()=>{
+              return '---token---'
+            },
+          refreshToken:()=>{
+            return '---refreshToken---'
+          },
+          saveToken:()=>{
+              throw new Error("请实现此Hook->saveToken")
+          },
+          uploadNotify:(e:{uid:string|number,message:string})=>{
+              console.info('kconfig.uploadHook.uploadNotify->e:%o',e)
+          },
+          messageBox:()=>{
+              throw new Error("kconfig.ts尚未实现:messageBox(type:'error'|'success'|'warning'|'info',message:string)")
+          },
+          chunkSize: 1024 * 1024 * 1,
+          merge(options:Optional<AxiosConfig>){
+              for(const key in options){
+                  this[key] = options[key]
+              }
+          }
+    }
+
+    constructor(config:Optional<AxiosConfig<TResponseCode>>){
+        this.config = this.KCONFIG
         for(const key in config){
           config[key]&&(this.config[key]=config[key])
         }
@@ -56,18 +99,21 @@ class RequestFactory{
             (error: AxiosError) => {return Promise.reject(error)}
         )
         // 响应拦截器
-        this.service.interceptors.response.use(
-            this.responseProcess,
-            (error: AxiosError<AjaxResult>)=> {
+        this.service.interceptors.response.use(this.responseProcess,(error: AxiosError<AjaxResult<TResponseCode>>)=> {
               this.requests.isRefreshing=false
-              if(this.config.useRefreshToken&&error.response?.status === 401&&(error.response.data?.code as AjaxResultCode)===AjaxResultCode.InvalidToken){
+              if(this.config.useRefreshToken&&this.config.nextDo(error.response?.data?.code)){
                 //无权限情况
-                return this.processInvalidToken(error.response)
+                return this.processInvalidToken(error.response!)
               }
+
+              // if(this.config.useRefreshToken&&error.response?.status === 401
+              //   &&(error.response.data?.code as AjaxResultCode)===AjaxResultCode.InvalidToken){
+              //   //无权限情况
+              //   return this.processInvalidToken(error.response)
+              // }
               this.showError(error)
               return Promise.reject(error)
-            }
-        )
+        })
     }
 
     public get axiosConfig() {
@@ -102,28 +148,15 @@ class RequestFactory{
     }
     
     //处理UI级消息相应
-    private messagePop = (ajaxResult: AjaxResult)=>{
-      if (typeof(ajaxResult.code)==='number'&& ajaxResult.message) {
-        const {code,message} = ajaxResult
-        switch (code) {
-          case AjaxResultCode.Error:
-              this.config.messageBox('error',message || '服务异常')
-            break;
-          case AjaxResultCode.Fail:
-          case AjaxResultCode.Warning:
-              this.config.messageBox('warning',message || '服务异常')
-            break;
-          case AjaxResultCode.None:
-            message&&this.config.messageBox('info',message)
-            break;
-          case AjaxResultCode.Success:
-            message&&this.config.messageBox('success',message)
-            break;
-          default:
-              this.config.messageBox('error',message || `未能识别code:${code}，请检查接口`)
-            break;
-        }
-      }
+    private messagePop = (response: AxiosResponse<AjaxResult<TResponseCode>>)=>{
+      // const message = response.data.message
+      // if(response.status===200){
+      //   message&&this.config.messageBox('success',message)
+      // }
+      // else{
+      //   this.config.messageBox('error',message || '服务异常')
+      // }
+      this.config.messageBox({status:response.status,code:response.data.code,message:response.data.message})
     }
 
     private isBizJsonResult(ajaxResult: any): ajaxResult is AjaxResult {
@@ -131,25 +164,28 @@ class RequestFactory{
     }
     
     // 错误处理
-    private showError=(error: AxiosError | AxiosResponse<AjaxResult>) =>{
+    private showError=(error: AxiosError<AjaxResult<TResponseCode>> | AxiosResponse<AjaxResult<TResponseCode>>) =>{
       if(error instanceof AxiosError)
       {
         if(this.isBizJsonResult(error.response?.data)){
-          this.messagePop(error.response.data)
+          this.messagePop(error.response)
         }
         else{
           const badMessage: any = error.message || error
-          this.config.messageBox('error',badMessage || '服务异常')
+          this.config.messageBox({
+            status:error.status||500,
+            data:{code:500,message:badMessage || '服务异常',data:undefined}
+          } as any)
         }
         // token过期，清除本地数据，并跳转至登录页面
         if (error.status === 403||error.status === 401) {
           setTimeout(() => {
             this.config.signOut()
-          },this.config.signOutWhen401And403Time||500);
+          },this.config.signOutWhen401And403Time||300);
         }
      }
      else{
-        this.messagePop(error.data)
+        this.messagePop(error)
      }
     }
 
@@ -167,14 +203,14 @@ class RequestFactory{
     }
     
     //从Http响应中获取业务级响应
-    private pickBizResponse = (nativeResponse: AxiosResponse): any =>{
-        if(nativeResponse.data.feedback){
-          return nativeResponse.data
-        }
-      
-        if (typeof nativeResponse.data === "undefined") {
-          nativeResponse.data = {};
-        }
+    private pickBizResponse = (nativeResponse: AxiosResponse<AjaxResult<TResponseCode>>): any =>{
+      // ddd
+        // if(nativeResponse.data.feedback){
+        //   return nativeResponse.data
+        // }
+        // if (typeof nativeResponse.data === "undefined") {
+        //   nativeResponse.data = {};
+        // }
       
         let response: any;
         const { data:retResult } = nativeResponse;
@@ -193,12 +229,12 @@ class RequestFactory{
     }
     
     //处理业务级响应AxiosResponse<TRetData, TRequestData> | PromiseLike<AxiosResponse<TRetData, TRequestData>>
-    private resolveResponse(response: AxiosResponse,resolve: (value: any) => void){
+    private resolveResponse(response: AxiosResponse<AjaxResult<TResponseCode>>,resolve: (value: any) => void){
       resolve(this.config.unPackResponse!(response));
     }
 
     //处理令牌过期问题
-    private processInvalidToken=(response: AxiosResponse)=>{
+    private processInvalidToken=(response: AxiosResponse<AjaxResult<TResponseCode>>)=>{
       if(!this.requests.isRefreshing)
       {
         this.requests.isRefreshing=true
@@ -236,21 +272,21 @@ class RequestFactory{
     } 
 
     //处理响应入口 
-    public responseProcess=(response: AxiosResponse):Promise<any> => {
-        const {code:bizCode} = response.data
-        //兼容旧版本无权限情况
-        if(bizCode===AjaxResultCode.InvalidToken){
-          return this.processInvalidToken(response)
-        }
-        this.messagePop(response.data)
+    public responseProcess=(response: AxiosResponse<AjaxResult<TResponseCode>>):Promise<any> => {
+        //const {code:bizCode} = response.data
+        //兼容旧版本无权限情况//
+        // if(bizCode===AjaxResultCode.InvalidToken){
+        //   return this.processInvalidToken(response)
+        // }
+        this.messagePop(response)
         return new Promise(resolve=>this.resolveResponse(response,resolve))
     }
 
     //从Http相应获取重新包装的响应内容
-    public getAxiosResponse=(xhr:XMLHttpRequest,config:InternalAxiosRequestConfig|RequestOptionType) : AxiosResponse<AjaxResult,InternalAxiosRequestConfig>=>
+    public getAxiosResponse=(xhr:XMLHttpRequest,config:InternalAxiosRequestConfig|RequestOptionType) : AxiosResponse<AjaxResult<TResponseCode>,InternalAxiosRequestConfig>=>
     {
       return {
-        data: this.getBody(xhr) as AjaxResult,
+        data: this.getBody(xhr) as AjaxResult<TResponseCode>,
         status: xhr.status,
         statusText: xhr.statusText,
         headers:config.headers!,

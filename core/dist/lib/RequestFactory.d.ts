@@ -1,12 +1,13 @@
 import { AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { AjaxResult, AxiosConfig, Optional, RequestOptionType } from '../types';
-declare class RequestFactory {
+declare class RequestFactory<TResponseCode = number> {
     private service;
     private requests;
     private get defaultInterceptor();
     private config;
-    constructor(config: Optional<AxiosConfig>);
-    get axiosConfig(): AxiosConfig;
+    private KCONFIG;
+    constructor(config: Optional<AxiosConfig<TResponseCode>>);
+    get axiosConfig(): AxiosConfig<TResponseCode>;
     private resetRequests;
     private refreshToken;
     private messagePop;
@@ -16,8 +17,8 @@ declare class RequestFactory {
     private pickBizResponse;
     private resolveResponse;
     private processInvalidToken;
-    responseProcess: (response: AxiosResponse) => Promise<any>;
-    getAxiosResponse: (xhr: XMLHttpRequest, config: InternalAxiosRequestConfig | RequestOptionType) => AxiosResponse<AjaxResult, InternalAxiosRequestConfig>;
+    responseProcess: (response: AxiosResponse<AjaxResult<TResponseCode>>) => Promise<any>;
+    getAxiosResponse: (xhr: XMLHttpRequest, config: InternalAxiosRequestConfig | RequestOptionType) => AxiosResponse<AjaxResult<TResponseCode>, InternalAxiosRequestConfig>;
     get bigUploadApi(): string;
     get normalUploadApi(): string;
     /**
