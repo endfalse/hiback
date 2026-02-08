@@ -115,7 +115,7 @@ var RequestFactory = /** @class */ (function () {
                 }
                 else {
                     var badMessage = error.message || error;
-                    _this.config.messageBox({
+                    _this.messagePop({
                         status: error.status || 500,
                         data: { code: 500, message: badMessage || '服务异常', data: undefined }
                     });

@@ -172,7 +172,7 @@ class RequestFactory<TResponseCode=number>{
         }
         else{
           const badMessage: any = error.message || error
-          this.config.messageBox({
+          this.messagePop({
             status:error.status||500,
             data:{code:500,message:badMessage || '服务异常',data:undefined}
           } as any)

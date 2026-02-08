@@ -1,6 +1,6 @@
 {
   "name": "hiback",
-  "version": "5.0.0",
+  "version": "5.0.1",
   "description": "优化令牌刷新",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
