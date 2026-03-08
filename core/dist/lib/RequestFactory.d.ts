@@ -16,6 +16,12 @@ declare class RequestFactory<TResponseCode = number> {
      * @returns 规范化的完整 URL
      */
     private normalizeUrl;
+    /**
+     * 校验 URL 是否合法
+     * @param url - 待校验的 URL 字符串
+     * @returns 是否合法
+     */
+    private isUrlValid;
     private showError;
     private getBody;
     private defaultResponseAdapter;

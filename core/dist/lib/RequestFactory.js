@@ -88,69 +88,94 @@ var RequestFactory = /** @class */ (function () {
         // 错误处理
         this.showError = function (error) {
             var _a, _b, _c, _d, _e, _f;
-            if (error instanceof AxiosError) {
-                if (_this.isBizJsonResult((_a = error.response) === null || _a === void 0 ? void 0 : _a.data)) {
-                    _this.messagePop(error.response, "\u670D\u52A1\u5668\u9519\u8BEF\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002");
+            var _g = error.config || {}, configBaseURL = _g.baseURL, configURL = _g.url;
+            // 1. 拼接 URL 并校验合法性
+            var fullUrl = _this.normalizeUrl(configBaseURL, configURL);
+            // 2. 优先处理非法 URL 场景
+            if (!fullUrl || !_this.isUrlValid(fullUrl)) {
+                var fallbackMessage = isProduction
+                    ? '请求地址异常，请稍后重试'
+                    : "\u65E0\u6548\u7684\u8BF7\u6C42\u5730\u5740\uFF1AbaseURL=\"".concat((_a = error.config) === null || _a === void 0 ? void 0 : _a.baseURL, "\", url=\"").concat((_b = error.config) === null || _b === void 0 ? void 0 : _b.url, "\"\uFF0C\u62FC\u63A5\u540E\uFF1A\"").concat(fullUrl, "\"");
+                _this.messagePop({
+                    status: error.status || 500,
+                    data: { code: 500, message: fallbackMessage, data: undefined }
+                });
+            }
+            try {
+                if (error instanceof AxiosError) {
+                    if (_this.isBizJsonResult((_c = error.response) === null || _c === void 0 ? void 0 : _c.data)) {
+                        _this.messagePop(error.response, "\u670D\u52A1\u5668\u9519\u8BEF\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002");
+                    }
+                    else {
+                        var urlObj = new URL(fullUrl);
+                        var host = urlObj.hostname;
+                        var port = urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80);
+                        var baseMessage = '';
+                        var userMessage = '';
+                        // ========== 1. 端口程序未启动（核心场景） ==========
+                        if (error.code === 'ECONNREFUSED') {
+                            baseMessage = '服务暂时不可用，请稍后重试';
+                            if (!isProduction) {
+                                // 精准提示：服务器启动但端口程序关闭
+                                userMessage = "\u670D\u52A1\u5668 ".concat(host, " \u5DF2\u542F\u52A8\uFF0C\u4F46 ").concat(port, " \u7AEF\u53E3\u7684\u670D\u52A1\u672A\u8FD0\u884C\uFF01\u8BF7\u68C0\u67E5\u8BE5\u7AEF\u53E3\u7684\u7A0B\u5E8F\u662F\u5426\u542F\u52A8\u3002");
+                            }
+                        }
+                        // ========== 2. 服务器连接超时/不可达 ==========
+                        else if (['ETIMEDOUT', 'ENETUNREACH', 'ECONNABORTED'].includes(error.code || '')) {
+                            baseMessage = '网络连接异常，请检查网络后重试';
+                            if (!isProduction) {
+                                userMessage = "\u65E0\u6CD5\u8FDE\u63A5\u5230\u670D\u52A1\u5668 ".concat(host, "\uFF0C\u9519\u8BEF\u7801\uFF1A").concat(error.code, "\uFF0C\u53EF\u80FD\u662F\u670D\u52A1\u5668\u6574\u673A\u672A\u542F\u52A8\u6216\u7F51\u7EDC\u4E0D\u901A\u3002");
+                            }
+                        }
+                        // ========== 3. 响应格式异常（ERR_BAD_RESPONSE） ==========
+                        else if (error.code === 'ERR_BAD_RESPONSE') {
+                            baseMessage = '服务响应格式异常，请稍后重试';
+                            if (!isProduction) {
+                                // 仅提示「程序已启动但响应异常」，排除端口未启动的误导
+                                userMessage = "\u670D\u52A1\u5668 ".concat(host, ":").concat(port, " \u7A0B\u5E8F\u5DF2\u542F\u52A8\uFF0C\u4F46\u8FD4\u56DE\u975E\u6CD5\u54CD\u5E94\uFF08ERR_BAD_RESPONSE\uFF09\uFF01\u53EF\u80FD\u662F\u54CD\u5E94\u683C\u5F0F\u9519\u8BEF/\u7A7A\u54CD\u5E94\uFF0C\u539F\u59CB\u54CD\u5E94\uFF1A").concat(JSON.stringify(((_d = error.response) === null || _d === void 0 ? void 0 : _d.data) || '空响应'));
+                            }
+                        }
+                        // ========== 4. 服务器内部错误（500） ==========
+                        else if (((_e = error.response) === null || _e === void 0 ? void 0 : _e.status) === 500) {
+                            baseMessage = '服务器繁忙，请稍后重试';
+                            if (!isProduction) {
+                                userMessage = "\u670D\u52A1\u5668 ".concat(host, ":").concat(port, " \u7A0B\u5E8F\u5DF2\u542F\u52A8\uFF0C\u4F46\u5904\u7406\u8BF7\u6C42\u65F6\u53D1\u751F\u5185\u90E8\u9519\u8BEF\uFF08500\uFF09\uFF0C\u54CD\u5E94\uFF1A").concat(JSON.stringify(error.response.data));
+                            }
+                        }
+                        // ========== 5. 其他错误 ==========
+                        else {
+                            var status_1 = ((_f = error.response) === null || _f === void 0 ? void 0 : _f.status) || '未知';
+                            baseMessage = "\u8BF7\u6C42\u5931\u8D25\uFF08".concat(status_1, "\uFF09\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
+                            if (!isProduction) {
+                                userMessage = "\u8BF7\u6C42\u5931\u8D25\uFF0C\u72B6\u6001\u7801\uFF1A".concat(status_1, "\uFF0C\u9519\u8BEF\u7801\uFF1A").concat(error.code, "\uFF0C\u4FE1\u606F\uFF1A").concat(error.message);
+                            }
+                        }
+                        var badMessage = isProduction ? baseMessage : userMessage;
+                        _this.messagePop({
+                            status: error.status || 500,
+                            data: { code: 500, message: badMessage, data: undefined }
+                        });
+                    }
+                    // token过期，清除本地数据，并跳转至登录页面
+                    if (error.status === 403 || error.status === 401) {
+                        setTimeout(function () {
+                            _this.config.signOut();
+                        }, _this.config.signOutWhen401And403Time || 300);
+                    }
                 }
                 else {
-                    var urlObj = new URL(_this.normalizeUrl((_b = error.config) === null || _b === void 0 ? void 0 : _b.baseURL, (_c = error.config) === null || _c === void 0 ? void 0 : _c.baseURL));
-                    var host = urlObj.hostname;
-                    var port = urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80);
-                    var baseMessage = '';
-                    var userMessage = '';
-                    // ========== 1. 端口程序未启动（核心场景） ==========
-                    if (error.code === 'ECONNREFUSED') {
-                        baseMessage = '服务暂时不可用，请稍后重试';
-                        if (!isProduction) {
-                            // 精准提示：服务器启动但端口程序关闭
-                            userMessage = "\u670D\u52A1\u5668 ".concat(host, " \u5DF2\u542F\u52A8\uFF0C\u4F46 ").concat(port, " \u7AEF\u53E3\u7684\u670D\u52A1\u672A\u8FD0\u884C\uFF01\u8BF7\u68C0\u67E5\u8BE5\u7AEF\u53E3\u7684\u7A0B\u5E8F\u662F\u5426\u542F\u52A8\u3002");
-                        }
-                    }
-                    // ========== 2. 服务器连接超时/不可达 ==========
-                    else if (['ETIMEDOUT', 'ENETUNREACH', 'ECONNABORTED'].includes(error.code || '')) {
-                        baseMessage = '网络连接异常，请检查网络后重试';
-                        if (!isProduction) {
-                            userMessage = "\u65E0\u6CD5\u8FDE\u63A5\u5230\u670D\u52A1\u5668 ".concat(host, "\uFF0C\u9519\u8BEF\u7801\uFF1A").concat(error.code, "\uFF0C\u53EF\u80FD\u662F\u670D\u52A1\u5668\u6574\u673A\u672A\u542F\u52A8\u6216\u7F51\u7EDC\u4E0D\u901A\u3002");
-                        }
-                    }
-                    // ========== 3. 响应格式异常（ERR_BAD_RESPONSE） ==========
-                    else if (error.code === 'ERR_BAD_RESPONSE') {
-                        baseMessage = '服务响应格式异常，请稍后重试';
-                        if (!isProduction) {
-                            // 仅提示「程序已启动但响应异常」，排除端口未启动的误导
-                            userMessage = "\u670D\u52A1\u5668 ".concat(host, ":").concat(port, " \u7A0B\u5E8F\u5DF2\u542F\u52A8\uFF0C\u4F46\u8FD4\u56DE\u975E\u6CD5\u54CD\u5E94\uFF08ERR_BAD_RESPONSE\uFF09\uFF01\u53EF\u80FD\u662F\u54CD\u5E94\u683C\u5F0F\u9519\u8BEF/\u7A7A\u54CD\u5E94\uFF0C\u539F\u59CB\u54CD\u5E94\uFF1A").concat(JSON.stringify(((_d = error.response) === null || _d === void 0 ? void 0 : _d.data) || '空响应'));
-                        }
-                    }
-                    // ========== 4. 服务器内部错误（500） ==========
-                    else if (((_e = error.response) === null || _e === void 0 ? void 0 : _e.status) === 500) {
-                        baseMessage = '服务器繁忙，请稍后重试';
-                        if (!isProduction) {
-                            userMessage = "\u670D\u52A1\u5668 ".concat(host, ":").concat(port, " \u7A0B\u5E8F\u5DF2\u542F\u52A8\uFF0C\u4F46\u5904\u7406\u8BF7\u6C42\u65F6\u53D1\u751F\u5185\u90E8\u9519\u8BEF\uFF08500\uFF09\uFF0C\u54CD\u5E94\uFF1A").concat(JSON.stringify(error.response.data));
-                        }
-                    }
-                    // ========== 5. 其他错误 ==========
-                    else {
-                        var status_1 = ((_f = error.response) === null || _f === void 0 ? void 0 : _f.status) || '未知';
-                        baseMessage = "\u8BF7\u6C42\u5931\u8D25\uFF08".concat(status_1, "\uFF09\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
-                        if (!isProduction) {
-                            userMessage = "\u8BF7\u6C42\u5931\u8D25\uFF0C\u72B6\u6001\u7801\uFF1A".concat(status_1, "\uFF0C\u9519\u8BEF\u7801\uFF1A").concat(error.code, "\uFF0C\u4FE1\u606F\uFF1A").concat(error.message);
-                        }
-                    }
-                    var badMessage = isProduction ? baseMessage : userMessage;
-                    _this.messagePop({
-                        status: error.status || 500,
-                        data: { code: 500, message: badMessage, data: undefined }
-                    });
-                }
-                // token过期，清除本地数据，并跳转至登录页面
-                if (error.status === 403 || error.status === 401) {
-                    setTimeout(function () {
-                        _this.config.signOut();
-                    }, _this.config.signOutWhen401And403Time || 300);
+                    _this.messagePop(error, "网络或服务器错误，请稍后重试。");
                 }
             }
-            else {
-                _this.messagePop(error, "网络或服务器错误，请稍后重试。");
+            catch (urlParseError) {
+                // 兜底：极端情况（校验通过但解析失败）
+                var fallbackMessage = isProduction
+                    ? '请求地址异常，请稍后重试'
+                    : "URL \u89E3\u6790\u5931\u8D25\uFF1A".concat(fullUrl, "\uFF0C\u9519\u8BEF\uFF1A").concat(urlParseError.message);
+                _this.messagePop({
+                    status: error.status || 500,
+                    data: { code: 500, message: fallbackMessage, data: undefined }
+                });
             }
         };
         //获取响应体数据
@@ -168,13 +193,6 @@ var RequestFactory = /** @class */ (function () {
         };
         //从Http响应中获取业务级响应
         this.defaultResponseAdapter = function (nativeResponse) {
-            // ddd
-            // if(nativeResponse.data.feedback){
-            //   return nativeResponse.data
-            // }
-            // if (typeof nativeResponse.data === "undefined") {
-            //   nativeResponse.data = {};
-            // }
             var response;
             var retResult = nativeResponse.data;
             if (retResult && typeof (retResult.code) !== 'undefined') {
@@ -187,77 +205,8 @@ var RequestFactory = /** @class */ (function () {
             }
             return response;
         };
-        // //-Old
-        // private resetRequests(loginOut:boolean=false,reason:any|undefined=undefined){
-        //       this.requests.listing=[],
-        //       this.requests.isRefreshing =false,
-        //       this.requests.retry=0
-        //       this.requests.newToken=''
-        //       if(loginOut)
-        //       {
-        //           this.config.signOut()
-        //       }
-        //       if(reason)
-        //       {
-        //           Promise.reject(reason)
-        //       }
-        // }
-        // //-Old
-        // private refreshToken = ()=>{
-        //     if(this.requests.retry>0){
-        //         throw new Error('refresh token is invalid')
-        //     }
-        //     return this.request<{token:string,refreshToken:string}>({
-        //       url: this.config.refreshTokenApi,
-        //       method: 'post',
-        //       data:{refreshToken:this.config.refreshToken()},
-        //       headers:{'Content-Type':'application/x-www-form-urlencoded'},
-        //     })
-        // }
-        // //处理令牌过期问题-Old
-        // private processInvalidToken=(response: AxiosResponse<AjaxResult<TResponseCode>>)=>{
-        //   if(!this.requests.isRefreshing)
-        //   {
-        //     this.requests.isRefreshing=true
-        //     return new Promise(resolve=>{
-        //       this.refreshToken().then(async tokens=>{
-        //         const {token,refreshToken} = tokens
-        //           if (token&&refreshToken) {
-        //             //保存新的令牌
-        //             this.config.saveToken(token,refreshToken)
-        //             this.requests.newToken = token
-        //             //获取上次的请求重新发送并获取结果
-        //             const newret =  await this.request(response.config)
-        //             //处理token过期时请求需要的响应
-        //             resolve(newret)
-        //             //检查过期后同时发送的其他请求，并根据新的token重新发送请求
-        //             this.requests.listing.forEach((cb) => cb(token))
-        //             //清除请求队列
-        //             this.resetRequests()
-        //           }
-        //           else {
-        //             throw new Error('refresh token is invalid')
-        //           }
-        //       }).catch(reason=>{
-        //         this.resetRequests(true,reason)
-        //       })
-        //     }).finally(()=>{
-        //       this.requests.isRefreshing=false
-        //     }) 
-        //   }
-        //   return new Promise<any>(_=>{
-        //     this.requests.listing.push(_=>{
-        //       this.request(response.config)
-        //     })
-        //   })
-        // } 
         //处理响应入口 
         this.responseProcess = function (response) {
-            //const {code:bizCode} = response.data
-            //兼容旧版本无权限情况//
-            // if(bizCode===AjaxResultCode.InvalidToken){
-            //   return this.processInvalidToken(response)
-            // }
             _this.messagePop(response);
             return new Promise(function (resolve) { return _this.resolveResponse(response, resolve); });
         };
@@ -319,24 +268,12 @@ var RequestFactory = /** @class */ (function () {
         // 响应拦截器
         this.service.interceptors.response.use(this.responseProcess, function (error) {
             var _a;
-            // this.requests.isRefreshing=false
-            // if(this.config.useRefreshToken&&this.config.nextDo(error.response)){
-            //   //无权限情况
-            //   return this.processInvalidToken(error.response!)
-            // }
             return (_a = _this.config.tokenRequestHandler) === null || _a === void 0 ? void 0 : _a.handleRequestError(error, function () {
                 _this.showError(error);
             });
         });
     }
     Object.defineProperty(RequestFactory.prototype, "defaultInterceptor", {
-        //-Old
-        // private requests= {
-        //   isRefreshing:false,
-        //   listing:[] as ((token:string)=>void)[],
-        //   retry:0,
-        //   newToken:''
-        // }
         get: function () {
             var _this = this;
             return function (config) {
@@ -345,14 +282,6 @@ var RequestFactory = /** @class */ (function () {
                 config.headers = config.headers || {};
                 // JWT鉴权处理
                 if ((_a = config.url) === null || _a === void 0 ? void 0 : _a.endsWith(_this.config.refreshTokenApi)) {
-                    // if(this.requests.newToken){
-                    //   config.headers.Authorization=`Bearer ${this.requests.newToken}`
-                    // }
-                    // else
-                    // {
-                    //   //如果在刷新令牌时不需要设置jwt头
-                    //   delete config.headers.Authorization
-                    // }
                     //如果在刷新令牌时不需要设置jwt头
                     delete config.headers.Authorization;
                 }
@@ -387,18 +316,43 @@ var RequestFactory = /** @class */ (function () {
      * @returns 规范化的完整 URL
      */
     RequestFactory.prototype.normalizeUrl = function (baseURL, url) {
-        // 去除首尾空白和多余的 /
+        // 空值处理
         var normalizedBase = (baseURL === null || baseURL === void 0 ? void 0 : baseURL.trim().replace(/\/+$/, '')) || '';
         var normalizedUrl = (url === null || url === void 0 ? void 0 : url.trim().replace(/^\/+/, '')) || '';
-        // 拼接逻辑：
-        // 1. 两者都为空 → 返回空
-        // 2. 只有一个有值 → 直接返回该值
-        // 3. 两者都有值 → 中间加一个 / 拼接
-        if (!normalizedBase)
-            return normalizedUrl;
-        if (!normalizedUrl)
-            return normalizedBase;
-        return "".concat(normalizedBase, "/").concat(normalizedUrl);
+        // 第一步：拼接 Axios 的 baseURL 和接口路径
+        var fullUrl = '';
+        if (!normalizedBase) {
+            fullUrl = normalizedUrl;
+        }
+        else if (!normalizedUrl) {
+            fullUrl = normalizedBase;
+        }
+        else {
+            fullUrl = "".concat(normalizedBase, "/").concat(normalizedUrl);
+        }
+        // 第二步：处理相对路径（核心优化：读取环境变量，无硬编码）
+        if (fullUrl && !fullUrl.startsWith('http') && typeof window !== 'undefined') {
+            var origin_1 = window.location.origin; // 自动获取协议+主机+端口，如 http://localhost:8080
+            fullUrl = "".concat(origin_1, "/").concat(fullUrl.replace(/^\/+/, ''));
+        }
+        return fullUrl;
+    };
+    /**
+     * 校验 URL 是否合法
+     * @param url - 待校验的 URL 字符串
+     * @returns 是否合法
+     */
+    RequestFactory.prototype.isUrlValid = function (url) {
+        if (!url || url.trim() === '')
+            return false;
+        try {
+            // 尝试构造 URL，能成功则合法
+            new URL(url);
+            return true;
+        }
+        catch (_a) {
+            return false;
+        }
     };
     //处理业务级响应AxiosResponse<TRetData, TRequestData> | PromiseLike<AxiosResponse<TRetData, TRequestData>>
     RequestFactory.prototype.resolveResponse = function (response, resolve) {
