@@ -1,5 +1,6 @@
 import { AxiosRequestHeaders, AxiosResponse, AxiosResponseHeaders, RawAxiosRequestHeaders, RawAxiosResponseHeaders } from "axios";
 import { FeedbackEnum } from "../enums/system";
+import type TokenRequestHandler from '../lib/TokenRequestHandler';
 export * from './contants';
 export * from './upload';
 export * from '../enums/account';
@@ -11,7 +12,7 @@ export interface AxiosConfig<TResponseCode = number> {
     normalUploadApi: string;
     refreshTokenApi: string;
     useRefreshToken: boolean;
-    nextDo: (type?: TResponseCode) => boolean;
+    tokenRequestHandler?: TokenRequestHandler;
     headerHook: (header: RawAxiosRequestHeaders | AxiosRequestHeaders | RawAxiosResponseHeaders | AxiosResponseHeaders) => void;
     signOut: () => void;
     saveToken: (token: string, refreshToken: string | undefined) => void;
@@ -28,7 +29,7 @@ export interface AxiosConfig<TResponseCode = number> {
         message: string;
     }) => void;
     signOutWhen401And403Time?: number;
-    unPackResponse?: <TRetData = any, TRequestData = any>(nativeResponse: AxiosResponse<AjaxResult<TResponseCode, TRetData>, TRequestData>) => TRetData;
+    responseAdapter?: <TRetData = any, TRequestData = any>(nativeResponse: AxiosResponse<AjaxResult<TResponseCode, TRetData>, TRequestData>) => TRetData;
     [key: string]: any;
 }
 /**
@@ -78,6 +79,7 @@ export type Optional<T> = {
 export interface AjaxResult<TResponseCode = number, T = any> {
     code: TResponseCode;
     message: string;
+    msg?: string;
     data: T;
 }
 /**

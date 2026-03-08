@@ -1,9 +1,11 @@
 import { AxiosRequestHeaders, AxiosResponse, AxiosResponseHeaders, RawAxiosRequestHeaders, RawAxiosResponseHeaders } from "axios";
 import { FeedbackEnum} from "../enums/system";
+import type TokenRequestHandler from '../lib/TokenRequestHandler'
 export * from './contants'
 export * from './upload'
 export * from '../enums/account'
 export * from '../enums/system'
+
 export interface AxiosConfig<TResponseCode=number>{
     baseUrl:string;
     timeout:number;
@@ -11,7 +13,8 @@ export interface AxiosConfig<TResponseCode=number>{
     normalUploadApi:string;
     refreshTokenApi:string;
     useRefreshToken:boolean;
-    nextDo:(type?:TResponseCode)=>boolean,
+    tokenRequestHandler?: TokenRequestHandler
+    //nextDo:(response?: AxiosResponse<AjaxResult<TResponseCode>>)=>boolean,
     headerHook:(header: RawAxiosRequestHeaders | AxiosRequestHeaders | RawAxiosResponseHeaders | AxiosResponseHeaders)=>void;
     signOut:()=>void,
     saveToken:(token:string,refreshToken:string|undefined)=>void;
@@ -21,7 +24,7 @@ export interface AxiosConfig<TResponseCode=number>{
     chunkSize:number;
     uploadNotify:(e:{uid:string|number,message:string})=>void;
     signOutWhen401And403Time?:number;
-    unPackResponse?:<TRetData=any,TRequestData=any>(nativeResponse: AxiosResponse<AjaxResult<TResponseCode,TRetData>,TRequestData>)=>TRetData;
+    responseAdapter?:<TRetData=any,TRequestData=any>(nativeResponse: AxiosResponse<AjaxResult<TResponseCode,TRetData>,TRequestData>)=>TRetData;
     [key:string]:any
 }
 
@@ -78,6 +81,7 @@ export interface AjaxResult<TResponseCode=number,T =any>
 {
     code: TResponseCode,
     message: string,
+    msg?: string,//容错
     data: T
 }
 

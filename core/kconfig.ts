@@ -8,9 +8,9 @@ const config:AxiosConfig={
     refreshTokenApi:'system/user/refreshToken',
     signOutWhen401And403Time:500,
     useRefreshToken:false,
-    nextDo:()=>{
-        return false
-    },
+    // nextDo:()=>{
+    //     return false
+    // },
     headerHook:()=>{
         console.debug("尚未实现kconfig.api.headerHook")
     },

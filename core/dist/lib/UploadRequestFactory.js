@@ -146,7 +146,7 @@ var UploadRequestFactory = /** @class */ (function () {
                                 throw new Error('返回的数据格式错误');
                             }
                         };
-                        this.request.axiosConfig.unPackResponse != this.request.axiosConfig.unPackResponse || unwapperFun;
+                        this.request.axiosConfig.responseAdapter != this.request.axiosConfig.responseAdapter || unwapperFun;
                         return [4 /*yield*/, this.request.responseProcess(response)];
                     case 1: return [2 /*return*/, _a.sent()];
                 }

@@ -6,9 +6,9 @@ var config = {
     refreshTokenApi: 'system/user/refreshToken',
     signOutWhen401And403Time: 500,
     useRefreshToken: false,
-    nextDo: function () {
-        return false;
-    },
+    // nextDo:()=>{
+    //     return false
+    // },
     headerHook: function () {
         console.debug("尚未实现kconfig.api.headerHook");
     },

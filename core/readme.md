@@ -2,6 +2,7 @@
 ## 修复说明
 - 修复 UploadRequestFactory实例导出丢失this问题
 - [20241120] 处理文件上传请求时请求头令牌设置问题
+- [20250308] 优化请求失败提示信息
 ## 说明:
 > 用于辅助前端开发的工具包
 - 【RequestFactory】基于Axios封装的标准化前端请求模块
@@ -16,64 +17,68 @@
 ## 使用
 ### 安装
 ``` shell
-yarn add kongj@latest
+yarn add hiback@latest
 ```
 OR
 ``` shell
-npm install kongj@latest
+npm install hiback@latest
 ```
 ### 定义配置文件 axiosConfig.ts
 ``` javascript
-const config:AxiosConfig = {
-    baseUrl: baseURL,
-    timeout: 3000,
-    bigUploadApi: '',
-    normalUploadAPi: '',
-    refreshTokenApi:'',
-    headerHook: (headers) => {
-        console.debug("尚未实现kconfig.api.headerHook",headers)
+const config:AxiosConfig={
+    baseUrl:'https://j.jq123.net',
+    timeout:3000,
+    bigUploadApi:'https://j.jq123.net/file/uploadBig',
+    normalUploadApi:'https://j.jq123.net/file',
+    refreshTokenApi:'system/user/refreshToken',
+    signOutWhen401And403Time:500,
+    useRefreshToken:false,
+    // nextDo:()=>{
+    //     return false
+    // },
+    headerHook:()=>{
+        console.debug("尚未实现kconfig.api.headerHook")
     },
-    signOut: () => {
-        store.dispatch('user/loginOut')
+    signOut:()=>{
+        throw new Error("请实现此Hook->sinOut")
     },
-    token: () => {
-        return  store.state.user.token
+    token:()=>{
+        return '---token---'
+      },
+    refreshToken:()=>{
+       return '---refreshToken---'
     },
-    refreshToken: () => {
-        return store.state.user.refreshToken
+    saveToken:()=>{
+        throw new Error("请实现此Hook->saveToken")
     },
-    saveToken: (token) => {
-        store.commit('user/tokenChange',token)
+    uploadNotify:(e:{uid:string|number,message:string})=>{
+        console.info('kconfig.uploadHook.uploadNotify->e:%o',e)
     },
-    uploadNotify: (e: { uid: string | number; message: string} ) => {
-        mitter.emit('uploadNotify',e as any)
-    },
-    messageBox: (type,message) => {
-        ElMessage({
-            message: message || '服务异常',
-            type: 'error',
-            duration: 3 * 1000
-        })
+    messageBox:()=>{
+        throw new Error("kconfig.ts尚未实现:messageBox(type:'error'|'success'|'warning'|'info',message:string)")
     },
     chunkSize: 1024 * 1024 * 1,
-    merge: function (options: Optional<AxiosConfig>): void {
+    merge(options:Optional<AxiosConfig>){
+        for(const key in options){
+            this[key] = options[key]
+        }
     }
 }
 export default config
 ```
 ### 定义用于api请求的文件 request.ts
 ``` javascript
-import {baseUrl} from '@/config'
-import {RequestFactory} from 'kongj'
+import build,{RequestOptionType, UploadRequestFactory} from 'hiback'
 import axiosConfig from '@/config/axiosConfig'
-import { AxiosRequestConfig } from 'axios'
-let baseURL: any = import.meta.env.VITE_BASE_URL
-baseURL = baseURL=='/pro-api'?baseUrl:baseURL
-const facory = new RequestFactory(axiosConfig)
-export const getAxiosResponse= ()=>facory.getAxiosResponse
-export const responseProcess= ()=>facory.responseProcess
-const request=<T>(config: AxiosRequestConfig)=>{
-   return facory.request()<T>(config)
+import { ApiResultCodeType } from '@/types/framework'
+
+const exports =build<ApiResultCodeType>(axiosConfig)
+export default  exports.request
+export const getAxiosResponse = exports.getAxiosResponse
+export const responseProcess = exports.responseProcess
+export const uploadRequest=(option: RequestOptionType)=>{
+    const factory = new UploadRequestFactory<ApiResultCodeType>(axiosConfig)
+    return factory.create(option)
 }
-export default request
+export const config = axiosConfig
 ```
