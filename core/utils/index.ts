@@ -1,48 +1,71 @@
 import SparkMD5 from "spark-md5";
+import { UploadProgressEvent } from "../types";
 
 /**
  * 获取文件的MD5
  * 
 */
 export const getFileMd5 = (
+  id:string,
   file: File, 
-  callback: (percent: number) => void, 
+  progress: (e: UploadProgressEvent) => void, 
   useFileInfo: boolean = false  // 新增参数，默认不使用文件信息生成
 ) => {
     return new Promise<string>((resolve, reject) => {
+
         // 如果指定使用文件信息生成MD5
         if (useFileInfo) {
-            const spark = new SparkMD5();
+            const spark = new SparkMD5()
             // 使用文件的基本信息生成MD5：名称、大小、最后修改时间
-            spark.append(file.name);
-            spark.append(String(file.size));
-            spark.append(String(file.lastModified));
-            callback(100); // 立即完成
-            resolve(spark.end());
-            return;
+            spark.append(file.name)
+            spark.append(String(file.size))
+            spark.append(String(file.lastModified))
+            progress({
+                id,
+                loaded:1,
+                total:1,
+                progress:100,
+                message:'已获取到md5'
+            })
+            resolve(spark.end())
+            return
         }
 
         // 否则按原逻辑读取文件内容生成MD5
-        const spark = new SparkMD5.ArrayBuffer();
-        const fileReader = new FileReader();
-        const chunkSize = 1 * 1024 * 1024; // 1MB的块大小
-        let chunksRead = 0;
-        const totalChunks = Math.ceil(file.size / chunkSize);
+        const spark = new SparkMD5.ArrayBuffer()
+        const fileReader = new FileReader()
+        const chunkSize = 1 * 1024 * 1024 // 1MB的块大小
+        let chunksRead = 0
+        const totalChunks = Math.ceil(file.size / chunkSize)
         
+        progress({
+            id,
+            loaded:0,
+            total:totalChunks,
+            progress:0,
+            message:'开始计算md5...'
+        })
+
         const readNextChunk = () => {
-            const start = chunksRead * chunkSize;
-            const end = Math.min(start + chunkSize, file.size);
-            const blob = file.slice(start, end);
-            fileReader.readAsArrayBuffer(blob);
-        };
+            const start = chunksRead * chunkSize
+            const end = Math.min(start + chunkSize, file.size)
+            const blob = file.slice(start, end)
+            fileReader.readAsArrayBuffer(blob)
+        }
         
         fileReader.onload = function (event) {
             if (event.target && event.target.result instanceof ArrayBuffer) {
-                spark.append(event.target.result);
-                chunksRead++;
-                
+                spark.append(event.target.result)
+                chunksRead++
+                const pg = Math.floor((chunksRead / totalChunks) * 100)
                 // 调用回调更新进度
-                callback(Math.floor((chunksRead / totalChunks) * 100));
+                progress({
+                    id,
+                    loaded:chunksRead,
+                    total:totalChunks,
+                    progress: pg,
+                    message:pg<100 ?'计算md5中':'计算完成'
+                })
                 
                 if (chunksRead < totalChunks) {
                     readNextChunk();
@@ -62,6 +85,34 @@ export const getFileMd5 = (
     });
 };
     
+
+/**
+ * 获取文件的MD5
+ * 
+*/
+export const getBlobMd5 = (
+  chunkBlob: Blob
+) => {
+    const spark = new SparkMD5.ArrayBuffer()
+    const fileReader = new FileReader()
+    return new Promise<string>((resolve, reject) => {
+        
+        fileReader.readAsArrayBuffer(chunkBlob);
+        fileReader.onload = function (event) {
+            if (event.target && event.target.result instanceof ArrayBuffer) {
+                spark.append(event.target.result);
+                resolve(spark.end())
+            } else {
+                resolve('');
+            }
+        }
+
+        fileReader.onerror = function (error) {
+            reject(error);
+        }
+    })
+}
+
 /**
 * @description 精度控制
 */

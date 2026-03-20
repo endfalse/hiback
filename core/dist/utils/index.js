@@ -4,7 +4,7 @@ import SparkMD5 from "spark-md5";
  * 获取文件的MD5
  *
 */
-export var getFileMd5 = function (file, callback, useFileInfo // 新增参数，默认不使用文件信息生成
+export var getFileMd5 = function (id, file, progress, useFileInfo // 新增参数，默认不使用文件信息生成
 ) {
     if (useFileInfo === void 0) { useFileInfo = false; }
     return new Promise(function (resolve, reject) {
@@ -15,7 +15,13 @@ export var getFileMd5 = function (file, callback, useFileInfo // 新增参数，
             spark_1.append(file.name);
             spark_1.append(String(file.size));
             spark_1.append(String(file.lastModified));
-            callback(100); // 立即完成
+            progress({
+                id: id,
+                loaded: 1,
+                total: 1,
+                progress: 100,
+                message: '已获取到md5'
+            });
             resolve(spark_1.end());
             return;
         }
@@ -25,6 +31,13 @@ export var getFileMd5 = function (file, callback, useFileInfo // 新增参数，
         var chunkSize = 1 * 1024 * 1024; // 1MB的块大小
         var chunksRead = 0;
         var totalChunks = Math.ceil(file.size / chunkSize);
+        progress({
+            id: id,
+            loaded: 0,
+            total: totalChunks,
+            progress: 0,
+            message: '开始计算md5...'
+        });
         var readNextChunk = function () {
             var start = chunksRead * chunkSize;
             var end = Math.min(start + chunkSize, file.size);
@@ -35,8 +48,15 @@ export var getFileMd5 = function (file, callback, useFileInfo // 新增参数，
             if (event.target && event.target.result instanceof ArrayBuffer) {
                 spark.append(event.target.result);
                 chunksRead++;
+                var pg = Math.floor((chunksRead / totalChunks) * 100);
                 // 调用回调更新进度
-                callback(Math.floor((chunksRead / totalChunks) * 100));
+                progress({
+                    id: id,
+                    loaded: chunksRead,
+                    total: totalChunks,
+                    progress: pg,
+                    message: pg < 100 ? '计算md5中' : '计算完成'
+                });
                 if (chunksRead < totalChunks) {
                     readNextChunk();
                 }
@@ -52,6 +72,29 @@ export var getFileMd5 = function (file, callback, useFileInfo // 新增参数，
             reject(error);
         };
         readNextChunk();
+    });
+};
+/**
+ * 获取文件的MD5
+ *
+*/
+export var getBlobMd5 = function (chunkBlob) {
+    var spark = new SparkMD5.ArrayBuffer();
+    var fileReader = new FileReader();
+    return new Promise(function (resolve, reject) {
+        fileReader.readAsArrayBuffer(chunkBlob);
+        fileReader.onload = function (event) {
+            if (event.target && event.target.result instanceof ArrayBuffer) {
+                spark.append(event.target.result);
+                resolve(spark.end());
+            }
+            else {
+                resolve('');
+            }
+        };
+        fileReader.onerror = function (error) {
+            reject(error);
+        };
     });
 };
 /**

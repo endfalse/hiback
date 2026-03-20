@@ -3,7 +3,12 @@ import { AjaxResult, AxiosConfig, ContentType, Optional, UploadOptionsType } fro
 export declare class HibackError extends Error {
     constructor(m: string);
 }
-declare class RequestFactory<TResponseCode = number> {
+/**
+ * @description 请求服务
+ * @author kongjing
+ * @date 2026.03.13
+*/
+declare class RequestService<TResponseCode = number> {
     private service;
     private uploadService;
     private get defaultInterceptor();
@@ -30,7 +35,7 @@ declare class RequestFactory<TResponseCode = number> {
     private defaultResponseAdapter;
     private resolveResponse;
     responseProcess: (response: AxiosResponse<AjaxResult<TResponseCode>>) => Promise<any>;
-    getAxiosResponse: <T = AjaxResult<TResponseCode, any>, D = any>(xhr: XMLHttpRequest, requestConfig?: Optional<InternalAxiosRequestConfig<D>>) => AxiosResponse<T, D>;
+    getAxiosResponse: <T = AjaxResult<TResponseCode>, D = any>(xhr: XMLHttpRequest, requestConfig?: Optional<InternalAxiosRequestConfig<D>>) => AxiosResponse<T, D>;
     /**
      * 将 XHR 响应转换为 AxiosResponse 实例
      * @param xhr XHR 实例
@@ -39,12 +44,10 @@ declare class RequestFactory<TResponseCode = number> {
      */
     convertXhrToAxiosResponse<T = any, D = any>(xhr: XMLHttpRequest, requestConfig?: Optional<InternalAxiosRequestConfig<D>>): AxiosResponse<T, D>;
     private parseResponseHeaders;
-    uploadFile(file: File, opts: UploadOptionsType): Promise<{
-        id: any;
-        accessUrl: any;
-        previewUrl: any;
-    }>;
-    get httpRequest(): (option: import("../types").RequestOptionType) => Promise<import("../types").UploadRequestHandler>;
+    uploadFile(file: File, opts: UploadOptionsType): Promise<import("./UploadService").ComplexUploaded | import("./UploadService").ComplexUploaded[] | undefined>;
+    get httpRequest(): (option: import("../types").UploadRequestOptions & {
+        chunk: boolean;
+    }) => Promise<import("../types").UploadRequestHandler>;
     /**
      * @description 系统前端开发快速应用接口的能力，并提供标准的接口请求和响应处理
      * @author kongjing
@@ -57,5 +60,5 @@ declare class RequestFactory<TResponseCode = number> {
      * @date 2026.03.11
      */ responseAdapter<TRetData = any, TRequestData = any>(nativeResponse: AxiosResponse<AjaxResult<TResponseCode, TRetData>, TRequestData>): TRetData;
 }
-export default RequestFactory;
-//# sourceMappingURL=RequestFactory.d.ts.map
+export default RequestService;
+//# sourceMappingURL=RequestService.d.ts.map

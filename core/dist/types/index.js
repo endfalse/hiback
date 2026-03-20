@@ -1,7 +1,5 @@
-export * from './contants';
 export * from './upload';
-export * from '../enums/account';
-export * from '../enums/system';
+export * from './typeTools';
 /**
  * Content-Type常量定义
  */

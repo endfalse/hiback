@@ -1,8 +1,14 @@
+import { UploadProgressEvent } from "../types";
 /**
  * 获取文件的MD5
  *
 */
-export declare const getFileMd5: (file: File, callback: (percent: number) => void, useFileInfo?: boolean) => Promise<string>;
+export declare const getFileMd5: (id: string, file: File, progress: (e: UploadProgressEvent) => void, useFileInfo?: boolean) => Promise<string>;
+/**
+ * 获取文件的MD5
+ *
+*/
+export declare const getBlobMd5: (chunkBlob: Blob) => Promise<string>;
 /**
 * @description 精度控制
 */

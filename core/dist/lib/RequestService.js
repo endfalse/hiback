@@ -83,19 +83,28 @@ var HibackError = /** @class */ (function (_super) {
 }(Error));
 export { HibackError };
 var isProduction = process.env['NODE_ENV'] === 'production';
-var RequestFactory = /** @class */ (function () {
-    function RequestFactory(config) {
+/**
+ * @description 请求服务
+ * @author kongjing
+ * @date 2026.03.13
+*/
+var RequestService = /** @class */ (function () {
+    function RequestService(config) {
         var _this = this;
         this.KCONFIG = {
             baseUrl: 'https://j.jq123.net',
-            timeout: 3000,
             refreshTokenApi: 'system/user/refreshToken',
             signOutWhen401And403Time: 500,
             useRefreshToken: false,
             fileUpload: {
                 api: 'https://j.jq123.net/file/uploadBig',
                 chunkSize: 1024 * 1024 * 1,
-                batchSize: 12
+                batchSize: 12,
+                maxRetries: 3,
+                retryDelay: 1000,
+                uploadNotify: function (_) {
+                    console.debug("尚未实现kconfig.api.fileUpload.uploadNotify");
+                }
             },
             headerHook: function () {
                 console.debug("尚未实现kconfig.api.headerHook");
@@ -195,17 +204,15 @@ var RequestFactory = /** @class */ (function () {
                             }
                         }
                         var badMessage = isProduction ? baseMessage : userMessage;
-                        _this.messagePop({
-                            status: error.status || 500,
-                            data: { code: 500, message: badMessage, data: undefined }
-                        });
+                        var status_2 = error.status || 500;
+                        _this.messagePop({ status: status_2, data: { code: status_2, message: badMessage, data: undefined } });
                     }
                     // token过期，清除本地数据，并跳转至登录页面
-                    if (error.status === 403 || error.status === 401) {
-                        setTimeout(function () {
-                            _this.config.signOut();
-                        }, _this.config.signOutWhen401And403Time || 300);
-                    }
+                    // if (error.status === 403||error.status === 401 || fullUrl.indexOf(this.config.refreshTokenApi)) {
+                    //   setTimeout(() => {
+                    //     this.config.signOut()
+                    //   },this.config.signOutWhen401And403Time||300);
+                    // }
                 }
                 else {
                     _this.messagePop(error, "网络或服务器错误，请稍后重试。");
@@ -265,12 +272,8 @@ var RequestFactory = /** @class */ (function () {
         }
         this.config.responseAdapter = this.config.responseAdapter || this.defaultResponseAdapter;
         this.service = axios.create({ baseURL: this.config.baseUrl, timeout: this.config.timeout });
-        this.config.tokenRequestHandler = new TokenRequestHandler({
+        this.config.tokenRequestHandler = this.config.tokenRequestHandler || (new TokenRequestHandler(this, {
             useRefreshToken: this.config.useRefreshToken,
-            isTokenExpired: function (response) {
-                var _a;
-                return response.status === 401 && ((_a = response.data) === null || _a === void 0 ? void 0 : _a.code) === 10001;
-            },
             refreshToken: function () { return __awaiter(_this, void 0, void 0, function () {
                 var refreshToken, res;
                 return __generator(this, function (_a) {
@@ -279,32 +282,43 @@ var RequestFactory = /** @class */ (function () {
                             refreshToken = this.config.refreshToken();
                             if (!refreshToken)
                                 throw new HibackError('无刷新令牌');
-                            return [4 /*yield*/, this.service.post(this.config.refreshTokenApi, { refreshToken: refreshToken })];
+                            return [4 /*yield*/, this.request({
+                                    url: this.config.refreshTokenApi,
+                                    data: { refreshToken: refreshToken },
+                                    method: 'post'
+                                })];
                         case 1:
                             res = _a.sent();
-                            if (res.data.code !== 200)
-                                throw new HibackError(res.data.msg || '刷新失败');
-                            this.config.saveToken(res.data.data.token, res.data.data.refreshToken);
-                            return [2 /*return*/];
+                            if (!res.token || !res.refreshToken) {
+                                throw new HibackError('令牌刷新失败');
+                            }
+                            this.config.saveToken(res.token, res.refreshToken);
+                            return [2 /*return*/, res.token];
                     }
                 });
-            }); },
-            getLatestToken: function () {
-                return _this.config.token();
-            }
-        });
+            }); }
+        }));
         // 请求拦截器
         this.service.interceptors.request.use(this.defaultInterceptor, function (error) { return Promise.reject(error); });
         // 响应拦截器
         this.service.interceptors.response.use(this.responseProcess, function (error) {
             var _a;
-            return (_a = _this.config.tokenRequestHandler) === null || _a === void 0 ? void 0 : _a.handleRequestError(error, function () {
-                _this.showError(error);
+            return (_a = _this.config.tokenRequestHandler) === null || _a === void 0 ? void 0 : _a.handleRequestError(error).catch(function (reason) {
+                if (reason) {
+                    if ((reason === null || reason === void 0 ? void 0 : reason.code) === '401' || (reason === null || reason === void 0 ? void 0 : reason.code) === 'REFRESH_TOKEN_FAILED') {
+                        setTimeout(function () {
+                            _this.config.signOut(true);
+                        }, _this.config.signOutWhen401And403Time || 300);
+                    }
+                    else {
+                        _this.showError(reason);
+                    }
+                }
             });
         });
         this.uploadService = new UploadService(this);
     }
-    Object.defineProperty(RequestFactory.prototype, "defaultInterceptor", {
+    Object.defineProperty(RequestService.prototype, "defaultInterceptor", {
         get: function () {
             var _this = this;
             return function (config) {
@@ -330,14 +344,14 @@ var RequestFactory = /** @class */ (function () {
         enumerable: false,
         configurable: true
     });
-    Object.defineProperty(RequestFactory.prototype, "axiosConfig", {
+    Object.defineProperty(RequestService.prototype, "axiosConfig", {
         get: function () {
             return this.config;
         },
         enumerable: false,
         configurable: true
     });
-    RequestFactory.prototype.isBizJsonResult = function (ajaxResult) {
+    RequestService.prototype.isBizJsonResult = function (ajaxResult) {
         return ajaxResult && typeof ajaxResult === 'object' && 'code' in ajaxResult;
     };
     /**
@@ -346,7 +360,7 @@ var RequestFactory = /** @class */ (function () {
      * @param url - 接口路径（如 /user/list）
      * @returns 规范化的完整 URL
      */
-    RequestFactory.prototype.normalizeUrl = function (baseURL, url) {
+    RequestService.prototype.normalizeUrl = function (baseURL, url) {
         // 空值处理
         var normalizedBase = (baseURL === null || baseURL === void 0 ? void 0 : baseURL.trim().replace(/\/+$/, '')) || '';
         var normalizedUrl = (url === null || url === void 0 ? void 0 : url.trim().replace(/^\/+/, '')) || '';
@@ -373,7 +387,7 @@ var RequestFactory = /** @class */ (function () {
      * @param url - 待校验的 URL 字符串
      * @returns 是否合法
      */
-    RequestFactory.prototype.isUrlValid = function (url) {
+    RequestService.prototype.isUrlValid = function (url) {
         if (!url || url.trim() === '')
             return false;
         try {
@@ -386,7 +400,7 @@ var RequestFactory = /** @class */ (function () {
         }
     };
     //处理业务级响应AxiosResponse<TRetData, TRequestData> | PromiseLike<AxiosResponse<TRetData, TRequestData>>
-    RequestFactory.prototype.resolveResponse = function (response, resolve) {
+    RequestService.prototype.resolveResponse = function (response, resolve) {
         resolve(this.config.responseAdapter(response));
     };
     /**
@@ -395,7 +409,7 @@ var RequestFactory = /** @class */ (function () {
      * @param requestConfig 请求配置（构造 config 字段）
      * @returns 符合 AxiosResponse 规范的实例
      */
-    RequestFactory.prototype.convertXhrToAxiosResponse = function (xhr, requestConfig) {
+    RequestService.prototype.convertXhrToAxiosResponse = function (xhr, requestConfig) {
         if (requestConfig === void 0) { requestConfig = {}; }
         // 1. 确定 data 字段（根据 responseType 适配）
         var data;
@@ -430,7 +444,7 @@ var RequestFactory = /** @class */ (function () {
         };
         return axiosResponse;
     };
-    RequestFactory.prototype.parseResponseHeaders = function (headersStr) {
+    RequestService.prototype.parseResponseHeaders = function (headersStr) {
         var headers = {};
         if (!headersStr || typeof headersStr !== 'string')
             return headers;
@@ -466,10 +480,10 @@ var RequestFactory = /** @class */ (function () {
         return headers;
     };
     //上传文件
-    RequestFactory.prototype.uploadFile = function (file, opts) {
+    RequestService.prototype.uploadFile = function (file, opts) {
         return this.uploadService.upload(file, opts);
     };
-    Object.defineProperty(RequestFactory.prototype, "httpRequest", {
+    Object.defineProperty(RequestService.prototype, "httpRequest", {
         //组件使用
         get: function () {
             return this.uploadService.httpRequest;
@@ -482,9 +496,9 @@ var RequestFactory = /** @class */ (function () {
      * @author kongjing
      * @date 2026.03.11
      */ //xhr:XMLHttpRequest TRetData=any,TRequestData=any
-    RequestFactory.prototype.responseAdapter = function (nativeResponse) {
+    RequestService.prototype.responseAdapter = function (nativeResponse) {
         return this.config.responseAdapter(nativeResponse);
     };
-    return RequestFactory;
+    return RequestService;
 }());
-export default RequestFactory;
+export default RequestService;

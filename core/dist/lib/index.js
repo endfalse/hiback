@@ -1,4 +1,3 @@
-import UploadRequestFactory from './UploadRequestFactory';
-import RequestFactory from './RequestFactory';
-import ProgressComputing from '../lib/ProgressComputing';
-export { RequestFactory, UploadRequestFactory, ProgressComputing };
+import UploadService from './UploadService';
+import RequestFactory from './RequestService';
+export { RequestFactory, UploadService };

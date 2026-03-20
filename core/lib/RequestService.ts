@@ -1,11 +1,24 @@
-import axios , { AxiosError, AxiosRequestConfig, AxiosResponse, AxiosInstance, InternalAxiosRequestConfig } from 'axios'
-import { AjaxResultCode } from '../enums/system'
-import { AjaxResult, AxiosConfig, Optional, RequestOptionType } from '../types'
+import axios , { AxiosError, AxiosRequestConfig, AxiosResponse, AxiosInstance, InternalAxiosRequestConfig, RawAxiosResponseHeaders } from 'axios'
+import { AjaxResult, AxiosConfig, ContentType, Optional, UploadOptionsType } from '../types'
 import TokenRequestHandler from './TokenRequestHandler'
+import UploadService from './UploadService'
+export class HibackError extends Error {
+  constructor(m: string) {
+    super(m)
+    this.name = "HibackError"
+  }
+}
 
 const isProduction = process.env['NODE_ENV'] === 'production';
-class RequestFactory<TResponseCode=number>{
+/**
+ * @description 请求服务
+ * @author kongjing
+ * @date 2026.03.13
+*/
+class RequestService<TResponseCode=number>{
     private service: AxiosInstance
+    private uploadService: UploadService<TResponseCode>
+
     private get defaultInterceptor() {
         return (config: InternalAxiosRequestConfig<any>)=>{
             this.config.headerHook(config.headers)
@@ -33,20 +46,24 @@ class RequestFactory<TResponseCode=number>{
 
     private KCONFIG:AxiosConfig<TResponseCode>={
           baseUrl:'https://j.jq123.net',
-          timeout:3000,
-          bigUploadApi:'https://j.jq123.net/file/uploadBig',
-          normalUploadApi:'https://j.jq123.net/file',
           refreshTokenApi:'system/user/refreshToken',
           signOutWhen401And403Time:500,
           useRefreshToken:false,
-          // nextDo:()=>{
-          //     return false
-          // },
+          fileUpload:{
+            api:'https://j.jq123.net/file/uploadBig',
+            chunkSize: 1024 * 1024 * 1,
+            batchSize:12,
+            maxRetries:3,
+            retryDelay:1000,
+            uploadNotify:(_)=>{
+              console.debug("尚未实现kconfig.api.fileUpload.uploadNotify")
+            }
+          },
           headerHook:()=>{
               console.debug("尚未实现kconfig.api.headerHook")
           },
           signOut:()=>{
-              throw new Error("请实现此Hook->sinOut")
+              throw new HibackError("请实现此Hook->sinOut")
           },
           token:()=>{
               return '---token---'
@@ -55,15 +72,15 @@ class RequestFactory<TResponseCode=number>{
             return '---refreshToken---'
           },
           saveToken:()=>{
-              throw new Error("请实现此Hook->saveToken")
+              throw new HibackError("请实现此Hook->saveToken")
           },
           uploadNotify:(e:{uid:string|number,message:string})=>{
               console.info('kconfig.uploadHook.uploadNotify->e:%o',e)
           },
           messageBox:()=>{
-              throw new Error("kconfig.ts尚未实现:messageBox(type:'error'|'success'|'warning'|'info',message:string)")
+              throw new HibackError("kconfig.ts尚未实现:messageBox(type:'error'|'success'|'warning'|'info',message:string)")
           },
-          chunkSize: 1024 * 1024 * 1,
+          
           merge(options:Optional<AxiosConfig>){
               for(const key in options){
                   this[key] = options[key]
@@ -81,32 +98,46 @@ class RequestFactory<TResponseCode=number>{
 
         this.service = axios.create({baseURL: this.config.baseUrl,timeout:this.config.timeout})
 
-        this.config.tokenRequestHandler =new TokenRequestHandler({
+        this.config.tokenRequestHandler = this.config.tokenRequestHandler||(new TokenRequestHandler<TResponseCode>(this,{
             useRefreshToken: this.config.useRefreshToken,
-            isTokenExpired: (response) => {
-              return response.status === 401 && response.data?.code === 10001;
-            },
             refreshToken: async () => {
               const refreshToken = this.config.refreshToken();
-              if (!refreshToken) throw new Error('无刷新令牌');
-              const res = await this.service.post(this.config.refreshTokenApi, { refreshToken });
-              if (res.data.code !== 200) throw new Error(res.data.msg || '刷新失败');
-              this.config.saveToken(res.data.data.token,res.data.data.refreshToken)
-            },
-            getLatestToken: () => {
-              return this.config.token()
+              if (!refreshToken) throw new HibackError('无刷新令牌');
+                const res = await this.request<{token:string,refreshToken:string}>({
+                  url:this.config.refreshTokenApi,
+                  data:{ refreshToken },
+                  method:'post'
+                })
+                if (!res.token||!res.refreshToken)
+                { 
+                  throw new HibackError('令牌刷新失败');
+                }
+                this.config.saveToken(res.token,res.refreshToken)
+                return res.token
             }
-        })
+        }))
 
         // 请求拦截器
         this.service.interceptors.request.use(this.defaultInterceptor,(error: AxiosError) => {return Promise.reject(error)})
 
         // 响应拦截器
         this.service.interceptors.response.use(this.responseProcess,(error: AxiosError<AjaxResult<TResponseCode>>)=> {
-              return this.config.tokenRequestHandler?.handleRequestError(error,()=>{
-                this.showError(error)
-              })
+          return this.config.tokenRequestHandler?.handleRequestError(error)
+          .catch((reason?:AxiosError<AjaxResult<TResponseCode>>)=>{
+                if(reason)
+                {
+                  if(reason?.code==='401'||reason?.code==='REFRESH_TOKEN_FAILED'){
+                      setTimeout(() => {
+                        this.config.signOut(true)
+                      },this.config.signOutWhen401And403Time||300);
+                  }
+                  else{
+                    this.showError(reason)
+                  }
+              }
+            })
         })
+        this.uploadService = new UploadService<TResponseCode>(this)
     }
 
     public get axiosConfig() {
@@ -121,6 +152,7 @@ class RequestFactory<TResponseCode=number>{
     private isBizJsonResult(ajaxResult: any): ajaxResult is AjaxResult {
       return ajaxResult && typeof ajaxResult === 'object' && 'code' in ajaxResult
     }
+
     /**
      * 规范化拼接 URL，自动处理重复斜杠问题
      * @param baseURL - 基础地址（如 https://api.example.com/）
@@ -150,6 +182,7 @@ class RequestFactory<TResponseCode=number>{
 
       return fullUrl;
     }
+
     /**
      * 校验 URL 是否合法
      * @param url - 待校验的 URL 字符串
@@ -166,7 +199,7 @@ class RequestFactory<TResponseCode=number>{
       }
     }
     // 错误处理
-    private showError=(error: AxiosError<AjaxResult<TResponseCode>> | AxiosResponse<AjaxResult<TResponseCode>>) =>{
+    private showError=(error: AxiosError<AjaxResult<TResponseCode>>) =>{// | AxiosResponse<AjaxResult<TResponseCode>>
       const {baseURL:configBaseURL,url:configURL} = error.config||{}
       // 1. 拼接 URL 并校验合法性
       let fullUrl = this.normalizeUrl(configBaseURL,configURL);
@@ -232,17 +265,15 @@ class RequestFactory<TResponseCode=number>{
               }
             }
             const badMessage = isProduction?baseMessage:userMessage
-            this.messagePop({
-              status:error.status||500,
-              data:{code:500,message:badMessage,data:undefined}
-            } as any)
+            const status = error.status||500
+            this.messagePop({status,data:{code:status,message:badMessage,data:undefined}} as any)
           }
           // token过期，清除本地数据，并跳转至登录页面
-          if (error.status === 403||error.status === 401) {
-            setTimeout(() => {
-              this.config.signOut()
-            },this.config.signOutWhen401And403Time||300);
-          }
+          // if (error.status === 403||error.status === 401 || fullUrl.indexOf(this.config.refreshTokenApi)) {
+          //   setTimeout(() => {
+          //     this.config.signOut()
+          //   },this.config.signOutWhen401And403Time||300);
+          // }
         }
         else{
             this.messagePop(error,"网络或服务器错误，请稍后重试。")
@@ -260,19 +291,6 @@ class RequestFactory<TResponseCode=number>{
       }
     }
 
-    //获取响应体数据
-    private getBody=(xhr: XMLHttpRequest): AjaxResult|XMLHttpRequestResponseType => {
-        const text = xhr.responseText || xhr.response
-        if (!text) {
-        return text as XMLHttpRequestResponseType
-        }
-        try {
-        return JSON.parse(text) as AjaxResult
-        } catch {
-        return text as  XMLHttpRequestResponseType
-        }
-    }
-    
     //从Http响应中获取业务级响应
     private defaultResponseAdapter = (nativeResponse: AxiosResponse<AjaxResult<TResponseCode>>): any =>{
 
@@ -281,7 +299,7 @@ class RequestFactory<TResponseCode=number>{
       
         if(retResult && typeof(retResult.code)!=='undefined') 
         {
-          response =retResult.code === AjaxResultCode.Success
+          response =retResult.code === 200
           ? (retResult.data!==undefined?retResult.data:true)
           : (retResult.data!==undefined?retResult.data:false);
         }
@@ -304,34 +322,130 @@ class RequestFactory<TResponseCode=number>{
     }
 
     //从Http相应获取重新包装的响应内容
-    public getAxiosResponse=(xhr:XMLHttpRequest,config:InternalAxiosRequestConfig|RequestOptionType) : AxiosResponse<AjaxResult<TResponseCode>,InternalAxiosRequestConfig>=>
+    public getAxiosResponse=<T = AjaxResult<TResponseCode>, D = any>(xhr:XMLHttpRequest,requestConfig: Optional<InternalAxiosRequestConfig<D>>={}) 
+    : AxiosResponse<T,D>=>
     {
-      return {
-        data: this.getBody(xhr) as AjaxResult<TResponseCode>,
+      return this.convertXhrToAxiosResponse<T,D>(xhr,requestConfig)
+    }
+
+    /**
+     * 将 XHR 响应转换为 AxiosResponse 实例
+     * @param xhr XHR 实例
+     * @param requestConfig 请求配置（构造 config 字段）
+     * @returns 符合 AxiosResponse 规范的实例
+     */
+    convertXhrToAxiosResponse<T = any, D = any>(xhr: XMLHttpRequest,requestConfig: Optional<InternalAxiosRequestConfig<D>>={}) : AxiosResponse<T, D> {
+      // 1. 确定 data 字段（根据 responseType 适配）
+      let data: T;
+      const responseType = requestConfig.responseType || xhr.responseType;
+      try {
+        if (responseType === 'json' && xhr.responseText) {
+          data = JSON.parse(xhr.responseText) as T;
+        } else if (responseType === 'text' || responseType === '') {
+          data = xhr.responseText as T;
+        } else {
+          // blob/arraybuffer 等二进制类型
+          data = xhr.response as T;
+        }
+      } catch (e) {
+        // 解析失败时 data 为原始响应文本
+        data = xhr.responseText as T;
+        console.warn('解析 XHR 响应数据失败：', e);
+      }
+
+      // 2. 构建完整的 AxiosResponse 实例
+      const axiosResponse: AxiosResponse<T, D> = {
+        data,
         status: xhr.status,
         statusText: xhr.statusText,
-        headers:config.headers!,
-        config:config as any,
-        request: xhr,
+        headers: this.parseResponseHeaders(xhr.getAllResponseHeaders()),
+        config: {
+          // 补全默认请求配置
+          url: requestConfig.url || xhr.responseURL,
+          method: requestConfig.method || 'GET',
+          headers: requestConfig.headers!,
+          data: requestConfig.data,
+          responseType: responseType || 'text',
+          // 扩展自定义配置
+          ...requestConfig
+        },
+        request: xhr // 关联原始 XHR 实例
       }
+
+      return axiosResponse;
     }
 
-    public get bigUploadApi(){
-        return this.config.bigUploadApi
+    private parseResponseHeaders(headersStr: string): RawAxiosResponseHeaders {
+      const headers: RawAxiosResponseHeaders = {};
+      if (!headersStr || typeof headersStr !== 'string') return headers;
+      
+      // 分割响应头并解析为键值对（过滤空行）
+      headersStr.split('\r\n').forEach(line => {
+        // 去除整行首尾空白，过滤空行
+        const trimmedLine = line.trim();
+        if (!trimmedLine) return;
+
+        // 找到第一个冒号的位置（避免值中包含冒号导致分割错误）
+        const colonIndex = trimmedLine.indexOf(':');
+        if (colonIndex === -1) return; // 无效的头行（无冒号）
+
+        // 分割键和值，分别去除首尾空格
+        const key = trimmedLine.substring(0, colonIndex).trim().toLowerCase();
+        const value = trimmedLine.substring(colonIndex + 1).trim();
+
+        if (!key) return; // 空键跳过
+
+        // 处理多值头：始终保持数组类型（符合 Axios 规范）
+        if (headers[key]) {
+          // 如果已有值，确保是数组并追加
+          headers[key] = Array.isArray(headers[key]) 
+            ? [...headers[key], value] 
+            : [headers[key] as string, value];
+        } else {
+          // 首次赋值：单值也建议用数组（符合 Axios 对多值头的处理方式）
+          // 若想和 Axios 完全一致，单值可直接存字符串，多值存数组
+          headers[key] = value;
+          // 可选：严格按 Axios 规范（单值字符串，多值数组）
+          // headers[key] = value;
+        }
+      });
+
+      return headers;
     }
 
-    public get normalUploadApi(){
-        return this.config.normalUploadApi
+    //上传文件
+    public uploadFile(file:File, opts:UploadOptionsType){
+      return this.uploadService.upload(file,opts)
     }
-    
+
+    //组件使用
+    public get httpRequest(){
+      return this.uploadService.httpRequest
+    }
+
     /**
      * @description 系统前端开发快速应用接口的能力，并提供标准的接口请求和响应处理
      * @author kongjing
      * @date 2022.10.12
-     */
-    public request=<T=any,D=any>(config: AxiosRequestConfig<D>): Promise<T>=>{
+    */
+    public request=<T=any,D=any>(config: AxiosRequestConfig<D>,contentType:ContentType='application/json'): Promise<T>=>{
+        if(contentType)
+        {
+            config.headers = config.headers||{}
+            config.headers['Content-Type'] = contentType
+        }
         return this.service(config);
+    }
+
+    /**
+     * @description 适配相应为标准处理
+     * @author kongjing
+     * @date 2026.03.11
+     *///xhr:XMLHttpRequest TRetData=any,TRequestData=any
+    public responseAdapter<TRetData=any,TRequestData=any>(nativeResponse: AxiosResponse<AjaxResult<TResponseCode,TRetData>,TRequestData>)
+    :TRetData{
+        return this.config.responseAdapter!<TRetData,TRequestData>(nativeResponse)
     }
 }
 
-export default RequestFactory
+export default RequestService
