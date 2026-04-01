@@ -268,7 +268,7 @@ var RequestService = /** @class */ (function () {
         };
         this.config = this.KCONFIG;
         for (var key in config) {
-            config[key] && (this.config[key] = config[key]);
+            typeof (config[key]) !== undefined && (this.config[key] = config[key]);
         }
         this.config.responseAdapter = this.config.responseAdapter || this.defaultResponseAdapter;
         this.service = axios.create({ baseURL: this.config.baseUrl, timeout: this.config.timeout });

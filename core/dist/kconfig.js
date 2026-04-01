@@ -1,6 +1,6 @@
 var config = {
     baseUrl: 'https://j.jq123.net',
-    timeout: 3000,
+    timeout: 0,
     bigUploadApi: 'https://j.jq123.net/file/uploadBig',
     normalUploadApi: 'https://j.jq123.net/file',
     refreshTokenApi: 'system/user/refreshToken',

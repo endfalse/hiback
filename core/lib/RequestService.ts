@@ -91,7 +91,7 @@ class RequestService<TResponseCode=number>{
     constructor(config:Optional<AxiosConfig<TResponseCode>>){
         this.config = this.KCONFIG
         for(const key in config){
-          config[key]&&(this.config[key]=config[key])
+          typeof(config[key])!==undefined&&(this.config[key]=config[key])
         }
 
         this.config.responseAdapter = this.config.responseAdapter||this.defaultResponseAdapter

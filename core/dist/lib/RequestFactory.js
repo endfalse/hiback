@@ -88,7 +88,7 @@ var RequestFactory = /** @class */ (function () {
         var _this = this;
         this.KCONFIG = {
             baseUrl: 'https://j.jq123.net',
-            timeout: 3000,
+            timeout: 0,
             refreshTokenApi: 'system/user/refreshToken',
             signOutWhen401And403Time: 500,
             useRefreshToken: false,
