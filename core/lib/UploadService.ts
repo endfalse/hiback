@@ -1,9 +1,11 @@
 import { getBlobMd5, getFileMd5 } from "../utils/index"
 import RequestFactory, { HibackError } from "./RequestService"
-import { HibackRequestHeaders, UploadRequestOptions, UploadConfig, 
+import { HibackRequestHeaders, UploadConfig, 
     UploadedFile, UploadedImage, UploadedVideo, UploadNotifyFunction, 
-    UploadOptionsType, UploadRequestHandler } from '../types'
+    UploadOptionsType, UploadRequestHandler, 
+    HibackUploadData} from '../types'
 import { v4 as uuidv4 } from 'uuid';
+import { AxiosHeaderValue } from "axios";
 
 
 export type ComplexUploaded = UploadedFile | UploadedImage | UploadedVideo
@@ -56,39 +58,55 @@ export default class UploadService<TResponseCode=number>{
         return ret
     }
 
+    private buildHeaders<H extends Headers|Record<string,AxiosHeaderValue|undefined>> (headers?: H): Record<string, AxiosHeaderValue> {
+        const result: Record<string, AxiosHeaderValue> = {};
+        if (!headers) return result;
+
+        Object.entries(headers).forEach(([key, value]) => {
+            if (value != null) {
+            result[key] = value;
+            }
+        });
+
+        return result;
+    }
+    //累加
+    private _nextUid = 1;
      /**
      * @description 提供文件上传的封装，使用与el-plus和编辑器文件上传等配置
      * @author kongjing
      * @date 2026.03.13
      * */ 
-    public async httpRequest(option:UploadRequestOptions&{chunk:boolean}) : Promise<UploadRequestHandler>{
+    //
+    public getUploadRequestHandler() : UploadRequestHandler{
         if (typeof XMLHttpRequest === 'undefined'){
             throw new HibackError(`[XMLHttpRequest is undefined`)
         }
 
-        return new Promise((reslove)=>{
-            reslove(async (opts)=>{
-               opts.method = option.method||'POST'
-               opts.file.uid = opts.file.uid||uuidv4()
-               const ret = await this.upload(option.file,{
-                    data: opts.data, 
-                    headers: opts.headers,
-                    chunk:option.chunk,
-                    api:opts.action,
-                    uploadNotify:(e)=>{
-                        opts.onProgress({
-                            percent:e.progress,target:option.file
-                        } as any)
-                        //opts.onProgress({percent:e.progress,target:option.file} as any)
-                    }
-               })
-               opts.onSuccess({code:200,data:ret,message:"上传完成"})
+
+       return async (opts)=>{
+            opts.method = opts.method||'POST'
+            opts.file.uid = opts.file.uid||this._nextUid++
+            opts.action = (opts.action === '#' || !opts.action) ? this.config.api : opts.action || this.config.api
+            const ret = await this.upload(opts.file,{
+                data: opts.data, 
+                headers: this.buildHeaders(opts.headers),
+                chunk:opts.chunk,
+                api:opts.action,
+                uploadNotify:(e)=>{
+                    const {id,message,loaded,total,percent} =e
+                    opts.onProgress({
+                        id,message,loaded,total,percent,
+                        target:opts.file
+                    })
+                }
             })
-        })
+            opts.onSuccess({code:200,data:ret,message:"上传完成"})
+       }
     }
 
     private async getUploadId(meta:{totalChunks:number,name:string,size:number,type:string,md5:string},
-        data?:Record<string, string | Blob | [string | Blob, string]>,
+        data?:HibackUploadData,//Record<string, string | Blob | [string | Blob, string]>,
         headers?:HibackRequestHeaders,
         api:string|undefined=undefined){
         const requestData = new FormData()
@@ -121,7 +139,7 @@ export default class UploadService<TResponseCode=number>{
         api?:string,
         method:string,
         file:File,
-        data?:Record<string, string | Blob | [string | Blob, string]>,
+        data?:HibackUploadData,//Record<string, string | Blob | [string | Blob, string]>,
         headers?:HibackRequestHeaders,
         uploadNotify?:UploadNotifyFunction|undefined,
     }){
@@ -149,7 +167,7 @@ export default class UploadService<TResponseCode=number>{
             message:'上传完成',
             loaded:options.file.size,
             total:options.file.size,
-            progress:100
+            percent:100
         })
         return this.getResponseData(id,response)
     }
@@ -159,7 +177,7 @@ export default class UploadService<TResponseCode=number>{
         method:'post',
         uploadNotify?:UploadNotifyFunction|undefined,
         file:File,
-        data?:Record<string, string | Blob | [string | Blob, string]>,
+        data?:HibackUploadData,//Record<string, string | Blob | [string | Blob, string]>,
         headers?:HibackRequestHeaders
     }){
         return new Promise< ComplexUploaded | undefined>(async (resolve,reject)=>{
@@ -174,12 +192,12 @@ export default class UploadService<TResponseCode=number>{
                 // 每批并发数（可配置）
                 const batchSize = this.config.batchSize
                 const totalChunks = Math.ceil(options.file.size / this.config.chunkSize)
-                this.uploadNotify({id,message:'正在获取上传ID...', loaded:0,total:options.file.size,progress:0})
+                this.uploadNotify({id,message:'正在获取上传ID...', loaded:0,total:options.file.size,percent:0})
                 const meta={totalChunks,name:options.file.name,size:options.file.size,type:options.file.type,md5}
                 
                 // 获取上传 ID
                 const uploadId = await this.getUploadId(meta,options.data, options.headers,options.api)
-                this.uploadNotify({id,message:'开始上传...', loaded:0,total:options.file.size,progress:0})
+                this.uploadNotify({id,message:'开始上传...', loaded:0,total:options.file.size,percent:0})
 
                 //记录已完成的分片编号（用 Set 去重）
                 const completedChunks = new Set<number>()
@@ -222,7 +240,7 @@ export default class UploadService<TResponseCode=number>{
                     const failedChunks = batchResults.filter((result) => result.status === 'rejected')
 
                     if (failedChunks.length > 0) {
-                        const {loaded,progress} = this.getUploadLoaded(completedChunks,options.file.size)
+                        const {loaded,percent} = this.getUploadLoaded(completedChunks,options.file.size)
                         // 提取失败原因，方便排查
                         const failReasons = failedChunks.map((res) => (res as PromiseRejectedResult).reason).join('; ')
                         const error = new Error(`批次${i / batchSize + 1}有${failedChunks.length}个分片上传失败:${failReasons}`);
@@ -231,7 +249,7 @@ export default class UploadService<TResponseCode=number>{
                             message: error.message, 
                             loaded,
                             total:options.file.size,
-                            progress })
+                            percent })
 
                         // 终止整个上传流程
                         reject(error)
@@ -247,7 +265,7 @@ export default class UploadService<TResponseCode=number>{
                     message: '上传完成', 
                     loaded:options.file.size,
                     total:options.file.size,
-                    progress: 100 })
+                    percent: 100 })
                     resolve(finalResponse) 
                 } else {
                     this.uploadNotify({ 
@@ -255,7 +273,7 @@ export default class UploadService<TResponseCode=number>{
                     message: '所有分片上传完成，但未获取到有效结果', 
                     loaded:options.file.size,
                     total:options.file.size,
-                    progress: 100 })
+                    percent: 100 })
                     resolve(undefined);
                 }
             }
@@ -266,7 +284,7 @@ export default class UploadService<TResponseCode=number>{
                     message: err.message, 
                     loaded:0,
                     total:options.file.size,
-                    progress: 0 })
+                    percent: 0 })
                 reject(err)
             }
         })
@@ -293,7 +311,7 @@ export default class UploadService<TResponseCode=number>{
         let attempt = 0; // 当前重试次数
 
         // 上传前：传入“基于已完成分片的已上传大小”（无竞态）
-        const {loaded:currentLoaded,progress} = this.getUploadLoaded(chunkParams.completedChunks,chunkParams.size)
+        const {loaded:currentLoaded,percent} = this.getUploadLoaded(chunkParams.completedChunks,chunkParams.size)
         while (attempt < maxRetries) {
             try {
                 // 尝试上传单个分片
@@ -314,7 +332,7 @@ export default class UploadService<TResponseCode=number>{
                         loaded:currentLoaded,
                         total:chunkParams.size,
                         message: `分片 ${chunkParams.chunkNumber} 上传失败（已重试${maxRetries}次）`,
-                        progress: progress,
+                        percent
                     })
                     throw error; // 抛出错误，让外层 Promise 变为 rejected
                 }
@@ -324,7 +342,7 @@ export default class UploadService<TResponseCode=number>{
                     loaded:currentLoaded,
                     total:chunkParams.size,
                     message: `分片 ${chunkParams.chunkNumber} 上传失败，正在重试（${attempt}/${maxRetries}）`,
-                    progress
+                    percent
                 })
                 // 重试前等待指定间隔（避免高频重试触发服务端限流）
                 await new Promise(resolve => setTimeout(resolve, retryDelay));
@@ -370,13 +388,13 @@ export default class UploadService<TResponseCode=number>{
         },'multipart/form-data')
 
         //计算全局已上传大小
-        const {loaded,progress} = this.getUploadLoaded(upMetadata.completedChunks,upMetadata.size)
+        const {loaded,percent} = this.getUploadLoaded(upMetadata.completedChunks,upMetadata.size)
         this.uploadNotify({ 
             id:upMetadata.id, 
             loaded,
             total:upMetadata.size,
             message: `第${upMetadata.chunkNumber + 1}/${upMetadata.totalChunks}个分片上传成功`,
-            progress
+            percent
         })
         return response
     }
@@ -465,7 +483,7 @@ export default class UploadService<TResponseCode=number>{
             const e = Math.min(s + this.config.chunkSize, size)
             return sum + (e - s)
         }, 0);
-        const progress = Math.round((loaded / size) * 100)
-        return {progress,loaded}
+        const percent = Math.round((loaded / size) * 100)
+        return {percent,loaded}
     }
 }

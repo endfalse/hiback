@@ -1,5 +1,6 @@
 import { RawAxiosRequestHeaders } from "axios";
 export type HibackRequestHeaders = RawAxiosRequestHeaders;
+export type HibackUploadData = Record<string, string | Blob | [string | Blob, string] | string[]>;
 /**
  * 获取实例方法返回值类型
  */

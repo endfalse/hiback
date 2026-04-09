@@ -1,6 +1,6 @@
 import { AxiosResponse } from "axios";
 import type TokenRequestHandler from '../lib/TokenRequestHandler';
-import { HibackRequestHeaders } from "./typeTools";
+import { HibackRequestHeaders, HibackUploadData } from "./typeTools";
 import { UploadProgressEvent } from "./upload";
 export * from './upload';
 export * from './typeTools';
@@ -31,6 +31,7 @@ export type UploadConfig = {
  * Axios配置
  */
 export interface AxiosConfig<TResponseCode = number> {
+    debug?: boolean;
     baseUrl: string;
     refreshTokenApi: string;
     timeout?: number;
@@ -48,15 +49,15 @@ export interface AxiosConfig<TResponseCode = number> {
         message: string;
     }) => void;
     signOutWhen401And403Time?: number;
-    responseAdapter?: <TRetData = any, TRequestData = any>(nativeResponse: AxiosResponse<AjaxResult<TResponseCode, TRetData>, TRequestData>) => TRetData;
+    responseAdapter?: <TRetData = any, TRequestData = any>(nativeResponse: AxiosResponse<AjaxResult<TResponseCode, TRetData>, TRequestData>) => Promise<TRetData>;
     [key: string]: any;
 }
 /**
  * Axios 上传方法参数类型
  */
 export type UploadOptionsType = {
-    uploadNotify: UploadNotifyFunction;
-    data?: Record<string, string | Blob | [string | Blob, string]>;
+    uploadNotify?: UploadNotifyFunction;
+    data?: HibackUploadData;
     headers?: HibackRequestHeaders;
     chunk?: boolean;
     api?: string;

@@ -9,7 +9,6 @@ export class HibackError extends Error {
   }
 }
 
-const isProduction = process.env['NODE_ENV'] === 'production';
 /**
  * @description 请求服务
  * @author kongjing
@@ -42,13 +41,12 @@ class RequestService<TResponseCode=number>{
         }
     }
 
-    private config:AxiosConfig<TResponseCode>
-
-    private KCONFIG:AxiosConfig<TResponseCode>={
+    private config:AxiosConfig<TResponseCode>={
           baseUrl:'https://j.jq123.net',
           refreshTokenApi:'system/user/refreshToken',
           signOutWhen401And403Time:500,
           useRefreshToken:false,
+          debug:true,
           fileUpload:{
             api:'https://j.jq123.net/file/uploadBig',
             chunkSize: 1024 * 1024 * 1,
@@ -80,20 +78,19 @@ class RequestService<TResponseCode=number>{
           messageBox:()=>{
               throw new HibackError("kconfig.ts尚未实现:messageBox(type:'error'|'success'|'warning'|'info',message:string)")
           },
-          
-          merge(options:Optional<AxiosConfig>){
-              for(const key in options){
-                  this[key] = options[key]
-              }
-          }
+          // merge(options:Optional<AxiosConfig>){
+          //     for(const key in options){
+          //         this[key] = options[key]
+          //     }
+          // }
     }
-
+    private isDevelopment = false
     constructor(config:Optional<AxiosConfig<TResponseCode>>){
-        this.config = this.KCONFIG
+
         for(const key in config){
           typeof(config[key])!==undefined&&(this.config[key]=config[key])
         }
-
+        this.isDevelopment = !!this.config.debug
         this.config.responseAdapter = this.config.responseAdapter||this.defaultResponseAdapter
 
         this.service = axios.create({baseURL: this.config.baseUrl,timeout:this.config.timeout})
@@ -135,7 +132,8 @@ class RequestService<TResponseCode=number>{
                     this.showError(reason)
                   }
               }
-            })
+              return Promise.reject(reason)
+          })
         })
         this.uploadService = new UploadService<TResponseCode>(this)
     }
@@ -205,7 +203,7 @@ class RequestService<TResponseCode=number>{
       let fullUrl = this.normalizeUrl(configBaseURL,configURL);
       // 2. 优先处理非法 URL 场景
       if (!fullUrl||!this.isUrlValid(fullUrl)) {
-        const fallbackMessage = isProduction
+        const fallbackMessage = !this.isDevelopment
           ? '请求地址异常，请稍后重试'
           : `无效的请求地址：baseURL="${error.config?.baseURL}", url="${error.config?.url}"，拼接后："${fullUrl}"`;
          this.messagePop({
@@ -229,7 +227,7 @@ class RequestService<TResponseCode=number>{
             // ========== 1. 端口程序未启动（核心场景） ==========
             if (error.code === 'ECONNREFUSED') {
               baseMessage = '服务暂时不可用，请稍后重试';
-              if (!isProduction) {
+              if (this.isDevelopment) {
                 // 精准提示：服务器启动但端口程序关闭
                 userMessage = `服务器 ${host} 已启动，但 ${port} 端口的服务未运行！请检查该端口的程序是否启动。`;
               }
@@ -237,14 +235,14 @@ class RequestService<TResponseCode=number>{
             // ========== 2. 服务器连接超时/不可达 ==========
             else if (['ETIMEDOUT', 'ENETUNREACH', 'ECONNABORTED'].includes(error.code||'')) {
               baseMessage = '网络连接异常，请检查网络后重试';
-              if (!isProduction) {
+              if (this.isDevelopment) {
                 userMessage = `无法连接到服务器 ${host}，错误码：${error.code}，可能是服务器整机未启动或网络不通。`;
               }
             }
             // ========== 3. 响应格式异常（ERR_BAD_RESPONSE） ==========
             else if (error.code === 'ERR_BAD_RESPONSE') {
               baseMessage = '服务响应格式异常，请稍后重试';
-              if (!isProduction) {
+              if (this.isDevelopment) {
                 // 仅提示「程序已启动但响应异常」，排除端口未启动的误导
                 userMessage = `服务器 ${host}:${port} 程序已启动，但返回非法响应（ERR_BAD_RESPONSE）！可能是响应格式错误/空响应，原始响应：${JSON.stringify(error.response?.data || '空响应')}`;
               }
@@ -252,7 +250,7 @@ class RequestService<TResponseCode=number>{
             // ========== 4. 服务器内部错误（500） ==========
             else if (error.response?.status === 500) {
               baseMessage = '服务器繁忙，请稍后重试';
-              if (!isProduction) {
+              if (this.isDevelopment) {
                 userMessage = `服务器 ${host}:${port} 程序已启动，但处理请求时发生内部错误（500），响应：${JSON.stringify(error.response.data)}`;
               }
             }
@@ -260,20 +258,14 @@ class RequestService<TResponseCode=number>{
             else {
               const status = error.response?.status || '未知';
               baseMessage = `请求失败（${status}），请稍后重试`;
-              if (!isProduction) {
+              if (this.isDevelopment) {
                 userMessage = `请求失败，状态码：${status}，错误码：${error.code}，信息：${error.message}`;
               }
             }
-            const badMessage = isProduction?baseMessage:userMessage
+            const badMessage = !this.isDevelopment?baseMessage:userMessage
             const status = error.status||500
             this.messagePop({status,data:{code:status,message:badMessage,data:undefined}} as any)
           }
-          // token过期，清除本地数据，并跳转至登录页面
-          // if (error.status === 403||error.status === 401 || fullUrl.indexOf(this.config.refreshTokenApi)) {
-          //   setTimeout(() => {
-          //     this.config.signOut()
-          //   },this.config.signOutWhen401And403Time||300);
-          // }
         }
         else{
             this.messagePop(error,"网络或服务器错误，请稍后重试。")
@@ -281,7 +273,7 @@ class RequestService<TResponseCode=number>{
       }
       catch (urlParseError) {
         // 兜底：极端情况（校验通过但解析失败）
-        const fallbackMessage = isProduction
+        const fallbackMessage = !this.isDevelopment
           ? '请求地址异常，请稍后重试'
           : `URL 解析失败：${fullUrl}，错误：${(urlParseError as Error).message}`;
         this.messagePop({
@@ -292,36 +284,51 @@ class RequestService<TResponseCode=number>{
     }
 
     //从Http响应中获取业务级响应
-    private defaultResponseAdapter = (nativeResponse: AxiosResponse<AjaxResult<TResponseCode>>): any =>{
+    private defaultResponseAdapter = (nativeResponse: AxiosResponse<AjaxResult<TResponseCode>>): Promise<any> =>{
 
-        let response: any;
-        const { data:retResult } = nativeResponse;
-      
-        if(retResult && typeof(retResult.code)!=='undefined') 
-        {
-          response =retResult.code === 200
-          ? (retResult.data!==undefined?retResult.data:true)
-          : (retResult.data!==undefined?retResult.data:false);
-        }
-        else
-        {
-          response = retResult
-        }
-        return response     
+        return new Promise((reslove,reject)=>{
+
+          let response: any;
+          const { data:retResult } = nativeResponse;
+
+          if(retResult && typeof(retResult.code)!=='undefined') 
+          {
+            response =retResult.code === 200
+            ? (retResult.data!==undefined?retResult.data:true)
+            : (retResult.data!==undefined?retResult.data:false);
+            if(response === false){
+              return reject('Business error: API returned false directly')
+            }
+          }
+          else
+          {
+            response = retResult
+          }
+          reslove(response) 
+      })    
     }
     
     //处理业务级响应AxiosResponse<TRetData, TRequestData> | PromiseLike<AxiosResponse<TRetData, TRequestData>>
-    private resolveResponse(response: AxiosResponse<AjaxResult<TResponseCode>>,resolve: (value: any) => void){
-      resolve(this.config.responseAdapter!(response));
+    private resolveResponse(response: AxiosResponse<AjaxResult<TResponseCode>>,resolve: (value: any) => void,reject: (reason?: any) => void){
+      try{
+          const res = this.config.responseAdapter!(response)
+          resolve(res);
+      }catch(error){
+        reject(error)
+      }
     }
 
-    //处理响应入口 
+    /**
+     * 处理响应入口 
+    */
     public responseProcess=(response: AxiosResponse<AjaxResult<TResponseCode>>):Promise<any> => {
         this.messagePop(response)
-        return new Promise(resolve=>this.resolveResponse(response,resolve))
+        return new Promise((resolve,reject)=>this.resolveResponse(response,resolve,reject))
     }
 
-    //从Http相应获取重新包装的响应内容
+    /**
+     * 从Http相应获取重新包装的响应内容
+    */
     public getAxiosResponse=<T = AjaxResult<TResponseCode>, D = any>(xhr:XMLHttpRequest,requestConfig: Optional<InternalAxiosRequestConfig<D>>={}) 
     : AxiosResponse<T,D>=>
     {
@@ -419,8 +426,8 @@ class RequestService<TResponseCode=number>{
     }
 
     //组件使用
-    public get httpRequest(){
-      return this.uploadService.httpRequest
+    public get uploadRequestHandler(){
+      return this.uploadService.getUploadRequestHandler()
     }
 
     /**
@@ -428,7 +435,8 @@ class RequestService<TResponseCode=number>{
      * @author kongjing
      * @date 2022.10.12
     */
-    public request=<T=any,D=any>(config: AxiosRequestConfig<D>,contentType:ContentType='application/json'): Promise<T>=>{
+    public request=<T=any,D=any>(config: AxiosRequestConfig<D>,contentType:ContentType|undefined=undefined): Promise<T>=>{
+      contentType=contentType||'application/json'
         if(contentType)
         {
             config.headers = config.headers||{}
@@ -443,7 +451,7 @@ class RequestService<TResponseCode=number>{
      * @date 2026.03.11
      *///xhr:XMLHttpRequest TRetData=any,TRequestData=any
     public responseAdapter<TRetData=any,TRequestData=any>(nativeResponse: AxiosResponse<AjaxResult<TResponseCode,TRetData>,TRequestData>)
-    :TRetData{
+    :Promise<TRetData>{
         return this.config.responseAdapter!<TRetData,TRequestData>(nativeResponse)
     }
 }

@@ -13,7 +13,7 @@ declare class RequestService<TResponseCode = number> {
     private uploadService;
     private get defaultInterceptor();
     private config;
-    private KCONFIG;
+    private isDevelopment;
     constructor(config: Optional<AxiosConfig<TResponseCode>>);
     get axiosConfig(): AxiosConfig<TResponseCode>;
     private messagePop;
@@ -34,7 +34,13 @@ declare class RequestService<TResponseCode = number> {
     private showError;
     private defaultResponseAdapter;
     private resolveResponse;
+    /**
+     * 处理响应入口
+    */
     responseProcess: (response: AxiosResponse<AjaxResult<TResponseCode>>) => Promise<any>;
+    /**
+     * 从Http相应获取重新包装的响应内容
+    */
     getAxiosResponse: <T = AjaxResult<TResponseCode>, D = any>(xhr: XMLHttpRequest, requestConfig?: Optional<InternalAxiosRequestConfig<D>>) => AxiosResponse<T, D>;
     /**
      * 将 XHR 响应转换为 AxiosResponse 实例
@@ -45,20 +51,18 @@ declare class RequestService<TResponseCode = number> {
     convertXhrToAxiosResponse<T = any, D = any>(xhr: XMLHttpRequest, requestConfig?: Optional<InternalAxiosRequestConfig<D>>): AxiosResponse<T, D>;
     private parseResponseHeaders;
     uploadFile(file: File, opts: UploadOptionsType): Promise<import("./UploadService").ComplexUploaded | import("./UploadService").ComplexUploaded[] | undefined>;
-    get httpRequest(): (option: import("../types").UploadRequestOptions & {
-        chunk: boolean;
-    }) => Promise<import("../types").UploadRequestHandler>;
+    get uploadRequestHandler(): import("..").UploadRequestHandler;
     /**
      * @description 系统前端开发快速应用接口的能力，并提供标准的接口请求和响应处理
      * @author kongjing
      * @date 2022.10.12
     */
-    request: <T = any, D = any>(config: AxiosRequestConfig<D>, contentType?: ContentType) => Promise<T>;
+    request: <T = any, D = any>(config: AxiosRequestConfig<D>, contentType?: ContentType | undefined) => Promise<T>;
     /**
      * @description 适配相应为标准处理
      * @author kongjing
      * @date 2026.03.11
-     */ responseAdapter<TRetData = any, TRequestData = any>(nativeResponse: AxiosResponse<AjaxResult<TResponseCode, TRetData>, TRequestData>): TRetData;
+     */ responseAdapter<TRetData = any, TRequestData = any>(nativeResponse: AxiosResponse<AjaxResult<TResponseCode, TRetData>, TRequestData>): Promise<TRetData>;
 }
 export default RequestService;
 //# sourceMappingURL=RequestService.d.ts.map

@@ -6,7 +6,7 @@ const config:AxiosConfig={
     refreshTokenApi:'system/user/refreshToken',
     signOutWhen401And403Time:500,
     useRefreshToken:false,
-
+    debug:true,
     fileUpload:{
         api:'upload',
         chunkSize:1 * 1024 * 1024,
@@ -33,11 +33,11 @@ const config:AxiosConfig={
     messageBox:()=>{
         throw new Error("kconfig.ts尚未实现:messageBox(type:'error'|'success'|'warning'|'info',message:string)")
     },
-    merge(options:Optional<AxiosConfig>){
-        for(const key in options){
-            this[key] = options[key]
-        }
-    }
+    // merge(options:Optional<AxiosConfig>){
+    //     for(const key in options){
+    //         this[key] = options[key]
+    //     }
+    // }
 }
 
 export default config

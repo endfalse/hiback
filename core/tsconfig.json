@@ -1,9 +1,10 @@
 {
     "files": ["index.ts"],
     "compilerOptions": {
-      "target": "ES5",
-      "module": "ES2015",
-      "moduleResolution": "node",
+      "module": "ESNext",
+      "moduleResolution": "bundler",
+      "lib": ["ES2016", "DOM", "ESNext"],
+      "target": "ES2016",
       "declaration": true,
       "declarationMap": true,
       "outDir": "./dist",

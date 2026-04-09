@@ -24,7 +24,7 @@ export const getFileMd5 = (
                 id,
                 loaded:1,
                 total:1,
-                progress:100,
+                percent:100,
                 message:'已获取到md5'
             })
             resolve(spark.end())
@@ -42,7 +42,7 @@ export const getFileMd5 = (
             id,
             loaded:0,
             total:totalChunks,
-            progress:0,
+            percent:0,
             message:'开始计算md5...'
         })
 
@@ -63,7 +63,7 @@ export const getFileMd5 = (
                     id,
                     loaded:chunksRead,
                     total:totalChunks,
-                    progress: pg,
+                    percent: pg,
                     message:pg<100 ?'计算md5中':'计算完成'
                 })
                 

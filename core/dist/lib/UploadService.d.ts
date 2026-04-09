@@ -1,5 +1,5 @@
 import RequestFactory from "./RequestService";
-import { UploadRequestOptions, UploadedFile, UploadedImage, UploadedVideo, UploadOptionsType, UploadRequestHandler } from '../types';
+import { UploadedFile, UploadedImage, UploadedVideo, UploadOptionsType, UploadRequestHandler } from '../types';
 export type ComplexUploaded = UploadedFile | UploadedImage | UploadedVideo;
 /**
  * @description 文件上传服务
@@ -18,14 +18,14 @@ export default class UploadService<TResponseCode = number> {
      * @date 2026.03.13
      * */
     upload(file: File, opts: UploadOptionsType): Promise<ComplexUploaded | ComplexUploaded[] | undefined>;
+    private buildHeaders;
+    private _nextUid;
     /**
     * @description 提供文件上传的封装，使用与el-plus和编辑器文件上传等配置
     * @author kongjing
     * @date 2026.03.13
     * */
-    httpRequest(option: UploadRequestOptions & {
-        chunk: boolean;
-    }): Promise<UploadRequestHandler>;
+    getUploadRequestHandler(): UploadRequestHandler;
     private getUploadId;
     private normalUpload;
     private uploadChunks;

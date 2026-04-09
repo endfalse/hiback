@@ -1,5 +1,6 @@
 import axios, { AxiosError, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from "axios";
 import RequestService from "./RequestService";
+import { ContentType } from "../types";
 
 
 declare module 'axios' {
@@ -143,7 +144,7 @@ export default class TokenRequestHandler<TResponseCode=number> {
         config.headers.Authorization = `Bearer ${latestToken}`;
       }
       // 2.2 重试请求并解析结果
-      this.requestServer.request(config)
+      this.requestServer.request(config,(config.headers?config.headers['Content-Type']:undefined) as ContentType)
       .then(response=>resolve(response))
       .catch(error=>reject(error))
     });
