@@ -6,7 +6,7 @@ const config:AxiosConfig={
     refreshTokenApi:'system/user/refreshToken',
     signOutWhen401And403Time:500,
     useRefreshToken:false,
-    debug:true,
+    debug:false,
     fileUpload:{
         api:'upload',
         chunkSize:1 * 1024 * 1024,

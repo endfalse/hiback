@@ -123,7 +123,7 @@ class RequestService<TResponseCode=number>{
           .catch((reason?:AxiosError<AjaxResult<TResponseCode>>)=>{
                 if(reason)
                 {
-                  if(reason?.code==='401'||reason?.code==='REFRESH_TOKEN_FAILED'){
+                  if(reason?.status===401||reason?.code==='REFRESH_TOKEN_FAILED'){
                       setTimeout(() => {
                         this.config.signOut(true)
                       },this.config.signOutWhen401And403Time||300);
