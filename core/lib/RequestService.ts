@@ -197,91 +197,243 @@ class RequestService<TResponseCode=number>{
       }
     }
     // 错误处理
-    private showError=(error: AxiosError<AjaxResult<TResponseCode>>) =>{// | AxiosResponse<AjaxResult<TResponseCode>>
-      const {baseURL:configBaseURL,url:configURL} = error.config||{}
-      // 1. 拼接 URL 并校验合法性
-      let fullUrl = this.normalizeUrl(configBaseURL,configURL);
-      // 2. 优先处理非法 URL 场景
-      if (!fullUrl||!this.isUrlValid(fullUrl)) {
-        const fallbackMessage = !this.isDevelopment
-          ? '请求地址异常，请稍后重试'
-          : `无效的请求地址：baseURL="${error.config?.baseURL}", url="${error.config?.url}"，拼接后："${fullUrl}"`;
-         this.messagePop({
-              status:error.status||500,
-              data:{code:500,message:fallbackMessage,data:undefined}
-        } as any)
-      }
-      try{
-        if(error instanceof AxiosError)
-        {
-          if(this.isBizJsonResult(error.response?.data)){
-            this.messagePop(error.response,`服务器错误，请稍后重试。`)
-          }
-          else{
-            const urlObj = new URL(fullUrl)
-            const host = urlObj.hostname;
-            const port = urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80);
+    // private showErrorOld=(error: AxiosError<AjaxResult<TResponseCode>>) =>{// | AxiosResponse<AjaxResult<TResponseCode>>
+    //   const {baseURL:configBaseURL,url:configURL} = error.config||{}
+    //   // 1. 拼接 URL 并校验合法性
+    //   let fullUrl = this.normalizeUrl(configBaseURL,configURL);
+    //   // 2. 优先处理非法 URL 场景
+    //   if (!fullUrl||!this.isUrlValid(fullUrl)) {
+    //     const fallbackMessage = !this.isDevelopment
+    //       ? '请求地址异常，请稍后重试'
+    //       : `无效的请求地址：baseURL="${error.config?.baseURL}", url="${error.config?.url}"，拼接后："${fullUrl}"`;
+    //      this.messagePop({
+    //           status:error.status||500,
+    //           data:{code:500,message:fallbackMessage,data:undefined}
+    //     } as any)
+    //   }
+    //   try{
+    //     if(error instanceof AxiosError)
+    //     {
+    //       if(this.isBizJsonResult(error.response?.data)){
+    //         this.messagePop(error.response,`服务器错误，请稍后重试。`)
+    //       }
+    //       else{
+    //         const urlObj = new URL(fullUrl)
+    //         const host = urlObj.hostname;
+    //         const port = urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80);
 
-            let baseMessage = ''
-            let userMessage = ''
-            // ========== 1. 端口程序未启动（核心场景） ==========
-            if (error.code === 'ECONNREFUSED') {
-              baseMessage = '服务暂时不可用，请稍后重试';
-              if (this.isDevelopment) {
-                // 精准提示：服务器启动但端口程序关闭
-                userMessage = `服务器 ${host} 已启动，但 ${port} 端口的服务未运行！请检查该端口的程序是否启动。`;
-              }
-            }
-            // ========== 2. 服务器连接超时/不可达 ==========
-            else if (['ETIMEDOUT', 'ENETUNREACH', 'ECONNABORTED'].includes(error.code||'')) {
-              baseMessage = '网络连接异常，请检查网络后重试';
-              if (this.isDevelopment) {
-                userMessage = `无法连接到服务器 ${host}，错误码：${error.code}，可能是服务器整机未启动或网络不通。`;
-              }
-            }
-            // ========== 3. 响应格式异常（ERR_BAD_RESPONSE） ==========
-            else if (error.code === 'ERR_BAD_RESPONSE') {
-              baseMessage = '服务响应格式异常，请稍后重试';
-              if (this.isDevelopment) {
-                // 仅提示「程序已启动但响应异常」，排除端口未启动的误导
-                userMessage = `服务器 ${host}:${port} 程序已启动，但返回非法响应（ERR_BAD_RESPONSE）！可能是响应格式错误/空响应，原始响应：${JSON.stringify(error.response?.data || '空响应')}`;
-              }
-            }
-            // ========== 4. 服务器内部错误（500） ==========
-            else if (error.response?.status === 500) {
-              baseMessage = '服务器繁忙，请稍后重试';
-              if (this.isDevelopment) {
-                userMessage = `服务器 ${host}:${port} 程序已启动，但处理请求时发生内部错误（500），响应：${JSON.stringify(error.response.data)}`;
-              }
-            }
-            // ========== 5. 其他错误 ==========
-            else {
-              const status = error.response?.status || '未知';
-              baseMessage = `请求失败（${status}），请稍后重试`;
-              if (this.isDevelopment) {
-                userMessage = `请求失败，状态码：${status}，错误码：${error.code}，信息：${error.message}`;
-              }
-            }
-            const badMessage = !this.isDevelopment?baseMessage:userMessage
-            const status = error.status||500
-            this.messagePop({status,data:{code:status,message:badMessage,data:undefined}} as any)
-          }
-        }
-        else{
-            this.messagePop(error,"网络或服务器错误，请稍后重试。")
-        }
-      }
-      catch (urlParseError) {
-        // 兜底：极端情况（校验通过但解析失败）
+    //         let baseMessage = ''
+    //         let userMessage = ''
+
+    //         //error.response.data
+
+    //         // ========== 4. 服务器内部错误（500） ==========
+    //         if (error.response?.status === 500) {
+    //           baseMessage = '服务器繁忙，请稍后重试';
+    //           if (this.isDevelopment) {
+    //             userMessage = `服务器 ${host}:${port} 程序已启动，但处理请求时发生内部错误（500），响应：${JSON.stringify(error.response.data)}`;
+    //           }
+    //         }
+    //         else if (error.response?.status === 301) {
+    //           baseMessage = error.response.data.message||'没有权限访问';
+    //           if (this.isDevelopment) {
+    //             userMessage = `服务器 ${host}:${port} 程序已启动，但处理请求时发生内部错误（500），响应：${JSON.stringify(error.response.data)}`;
+    //           }
+    //         }
+    //         // ========== 1. 端口程序未启动（核心场景） ==========
+    //         else if (error.code === 'ECONNREFUSED') {
+    //           baseMessage = '服务暂时不可用，请稍后重试';
+    //           if (this.isDevelopment) {
+    //             // 精准提示：服务器启动但端口程序关闭
+    //             userMessage = `服务器 ${host} 已启动，但 ${port} 端口的服务未运行！请检查该端口的程序是否启动。`;
+    //           }
+    //         }
+    //         // ========== 2. 服务器连接超时/不可达 ==========
+    //         else if (['ETIMEDOUT', 'ENETUNREACH', 'ECONNABORTED'].includes(error.code||'')) {
+    //           baseMessage = '网络连接异常，请检查网络后重试';
+    //           if (this.isDevelopment) {
+    //             userMessage = `无法连接到服务器 ${host}，错误码：${error.code}，可能是服务器整机未启动或网络不通。`;
+    //           }
+    //         }
+    //         // ========== 3. 响应格式异常（ERR_BAD_RESPONSE） ==========
+    //         else if (error.code === 'ERR_BAD_RESPONSE') {
+    //           baseMessage = '服务响应格式异常，请稍后重试';
+    //           if (this.isDevelopment) {
+    //             // 仅提示「程序已启动但响应异常」，排除端口未启动的误导
+    //             userMessage = `服务器 ${host}:${port} 程序已启动，但返回非法响应（ERR_BAD_RESPONSE）！可能是响应格式错误/空响应，原始响应：${JSON.stringify(error.response?.data || '空响应')}`;
+    //           }
+    //         }
+    //         // ========== 5. 其他错误 ==========
+    //         else {
+    //           const status = error.response?.status || '未知';
+    //           baseMessage = `请求失败（${status}），请稍后重试`;
+    //           if (this.isDevelopment) {
+    //             userMessage = `请求失败，状态码：${status}，错误码：${error.code}，信息：${error.message}`;
+    //           }
+    //         }
+    //         const badMessage = !this.isDevelopment?baseMessage:userMessage
+    //         const status = error.status||500
+    //         this.messagePop({status,data:{code:status,message:badMessage,data:undefined}} as any)
+    //       }
+    //     }
+    //     else{
+    //         this.messagePop(error,"网络或服务器错误，请稍后重试。")
+    //     }
+    //   }
+    //   catch (urlParseError) {
+    //     // 兜底：极端情况（校验通过但解析失败）
+    //     const fallbackMessage = !this.isDevelopment
+    //       ? '请求地址异常，请稍后重试'
+    //       : `URL 解析失败：${fullUrl}，错误：${(urlParseError as Error).message}`;
+    //     this.messagePop({
+    //           status:error.status||500,
+    //           data:{code:500,message:fallbackMessage,data:undefined}
+    //     } as any)
+    //   }
+    // }
+
+    private showError = (error: AxiosError<AjaxResult<TResponseCode>>) => {
+      // ========== 安全解构：防止 config 为 undefined 崩溃 ==========
+      const { baseURL: configBaseURL, url: configURL } = error.config || {};
+
+      let fullUrl: string | null = null;
+      try {
+        fullUrl = this.normalizeUrl(configBaseURL, configURL);
+      } catch (e) {}
+
+      // ========== 1. 非法URL（你原有逻辑，完全保留） ==========
+      if (!fullUrl || !this.isUrlValid(fullUrl)) {
         const fallbackMessage = !this.isDevelopment
           ? '请求地址异常，请稍后重试'
-          : `URL 解析失败：${fullUrl}，错误：${(urlParseError as Error).message}`;
+          : `无效的请求地址：baseURL="${configBaseURL}", url="${configURL}"，拼接后："${fullUrl}"`;
+
         this.messagePop({
-              status:error.status||500,
-              data:{code:500,message:fallbackMessage,data:undefined}
-        } as any)
+          status: error.status || 500,
+          data: { code: 500, message: fallbackMessage, data: undefined }
+        } as any);
+        return;
       }
+
+      try {
+        // ========== 确保是 AxiosError ==========
+        if (!(error instanceof AxiosError)) {
+          const msg = !this.isDevelopment
+            ? "网络或服务器错误，请稍后重试。"
+            : `非Axios错误：${error['message']}`;
+
+          this.messagePop({
+            status: 500,
+            data: { code: 500, message: msg, data: undefined }
+          } as any);
+          return;
+        }
+
+        // ========== 2. 优先处理：后端返回标准业务JSON（你原有逻辑） ==========
+        if (error.response && this.isBizJsonResult(error.response.data)) {
+          this.messagePop(error.response, `服务器错误，请稍后重试。`);
+          return;
+        }
+
+        // ========== 3. 解析 host/port（安全解析，不崩溃） ==========
+        let host = "unknown host";
+        let port = "unknown port";
+        try {
+          const urlObj = new URL(fullUrl);
+          host = urlObj.hostname;
+          port = urlObj.port || (urlObj.protocol === 'https:' ? '443' : '80');
+        } catch (e) {}
+
+        let baseMessage = '';
+        let userMessage = '';
+        const status = error.response?.status || 500;
+
+        // ====================== 你原来的所有判断 100% 保留 ======================
+        // 500
+        if (error.response?.status === 500) {
+          baseMessage = '服务器繁忙，请稍后重试';
+          if (this.isDevelopment) {
+            userMessage = `服务器 ${host}:${port} 程序已启动，但处理请求时发生内部错误（500），响应：${JSON.stringify(error.response.data)}`;
+          }
+        }
+        // 301
+        else if (error.response?.status === 301) {
+          baseMessage = error.response?.data?.message || '没有权限访问';
+          if (this.isDevelopment) {
+            userMessage = `服务器 ${host}:${port} 重定向（301）`;
+          }
+        }
+        // 端口未启动
+        else if (error.code === 'ECONNREFUSED') {
+          baseMessage = '服务暂时不可用，请稍后重试';
+          if (this.isDevelopment) {
+            userMessage = `服务器 ${host} 已启动，但 ${port} 端口的服务未运行！请检查该端口的程序是否启动。`;
+          }
+        }
+        // 网络不可达/超时
+        else if (['ETIMEDOUT', 'ENETUNREACH', 'ECONNABORTED'].includes(error.code || '')) {
+          baseMessage = '网络连接异常，请检查网络后重试';
+          if (this.isDevelopment) {
+            userMessage = `无法连接到服务器 ${host}，错误码：${error.code}，可能是服务器整机未启动或网络不通。`;
+          }
+        }
+        // 响应格式错误
+        else if (error.code === 'ERR_BAD_RESPONSE') {
+          baseMessage = '服务响应格式异常，请稍后重试';
+          if (this.isDevelopment) {
+            userMessage = `服务器 ${host}:${port} 程序已启动，但返回非法响应（ERR_BAD_RESPONSE）！原始响应：${JSON.stringify(error.response?.data || '空响应')}`;
+          }
+        }
+        // ========== ✅ 我帮你补上：缺失的关键错误（不破坏你原有逻辑） ==========
+        // 无响应：断网 / CORS / 跨域
+        else if (!error.response) {
+          baseMessage = '网络异常，请检查网络连接';
+          if (this.isDevelopment) {
+            userMessage = `无响应：断网/CORS/服务器未启动 | ${error.message}`;
+          }
+        }
+        // 401 未登录
+        else if (error.response?.status === 401) {
+          baseMessage = '登录已过期，请重新登录';
+          if (this.isDevelopment) userMessage = baseMessage;
+        }
+        // 403 无权限
+        else if (error.response?.status === 403) {
+          baseMessage = '您没有权限访问此资源';
+          if (this.isDevelopment) userMessage = baseMessage;
+        }
+        // 404 接口不存在
+        else if (error.response?.status === 404) {
+          baseMessage = '请求的接口不存在';
+          if (this.isDevelopment) userMessage = `${fullUrl} 404 不存在`;
+        }
+        // 其他
+        else {
+          baseMessage = `请求失败（${status}），请稍后重试`;
+          if (this.isDevelopment) {
+            userMessage = `请求失败，状态码：${status}，错误码：${error.code}，信息：${error.message}`;
+          }
     }
+
+    // ========== 你原有 isDevelopment 切换逻辑 100% 保留 ==========
+    const finalMessage = !this.isDevelopment ? baseMessage : userMessage;
+
+    this.messagePop({
+      status: status,
+      data: { code: status, message: finalMessage, data: undefined }
+    } as any);
+
+  } catch (urlParseError) {
+    // ========== 兜底catch（你原有逻辑） ==========
+    const fallbackMessage = !this.isDevelopment
+      ? '请求地址异常，请稍后重试'
+      : `URL 解析失败：${fullUrl}，错误：${(urlParseError as Error).message}`;
+
+    this.messagePop({
+      status: error.status || 500,
+      data: { code: 500, message: fallbackMessage, data: undefined }
+    } as any);
+  }
+};
 
     //从Http响应中获取业务级响应
     private defaultResponseAdapter = (nativeResponse: AxiosResponse<AjaxResult<TResponseCode>>): Promise<any> =>{

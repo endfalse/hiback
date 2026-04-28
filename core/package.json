@@ -1,6 +1,6 @@
 {
   "name": "hiback",
-  "version": "5.2.2",
+  "version": "5.2.3",
   "description": "优化请求失败提示语中url格式错误",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
