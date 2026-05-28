@@ -108,5 +108,6 @@ export interface AjaxResult<TResponseCode=number,T =any>
     code: TResponseCode,
     message: string,
     msg?: string,//容错
-    data: T
+    data: T,
+    extra?:any
 }

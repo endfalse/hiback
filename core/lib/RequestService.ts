@@ -445,9 +445,13 @@ class RequestService<TResponseCode=number>{
 
           if(retResult && typeof(retResult.code)!=='undefined') 
           {
-            response =retResult.code === 200
-            ? (retResult.data!==undefined?retResult.data:true)
-            : (retResult.data!==undefined?retResult.data:false);
+            const {code,data,extra} = retResult
+            response = code === 200
+            ? (data!==undefined?data:true)
+            : (data!==undefined?data:false);
+            if(extra){
+              response = {...response,...extra}
+            }
             if(response === false){
               return reject('Business error: API returned false directly')
             }
