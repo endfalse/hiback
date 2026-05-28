@@ -450,7 +450,7 @@ class RequestService<TResponseCode=number>{
             ? (data!==undefined?data:true)
             : (data!==undefined?data:false);
             if(extra){
-              response = {...response,...extra}
+              response = {...response,userData:extra}
             }
             if(response === false){
               return reject('Business error: API returned false directly')
